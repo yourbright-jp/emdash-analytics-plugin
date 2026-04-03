@@ -264,12 +264,12 @@ export function createPlugin() {
     },
     admin: {
       pages: [
-        { path: "/", label: "概要", icon: "chart-bar" },
-        { path: "/pages", label: "ページ", icon: "list" },
-        { path: "/settings", label: "設定", icon: "gear" }
+        { path: "/", label: "Overview", icon: "chart-bar" },
+        { path: "/pages", label: "Pages", icon: "list" },
+        { path: "/settings", label: "Settings", icon: "gear" }
       ],
       widgets: [
-        { id: "content-opportunities", title: "コンテンツ改善機会", size: "full" }
+        { id: "content-opportunities", title: "Content Opportunities", size: "full" }
       ]
     }
   });

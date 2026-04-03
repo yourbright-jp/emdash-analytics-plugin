@@ -273,11 +273,11 @@ function MetricTable({
       <table className="min-w-full text-sm">
         <thead className="text-left text-xs uppercase tracking-[0.16em] text-muted-foreground">
           <tr>
-            <th className="pb-3 pr-4">ページ</th>
-            <th className="pb-3 pr-4">種別</th>
+            <th className="pb-3 pr-4">Page</th>
+            <th className="pb-3 pr-4">Type</th>
             <th className="pb-3 pr-4">GSC Clicks</th>
             <th className="pb-3 pr-4">GA Views</th>
-            <th className="pb-3 pr-4">改善スコア</th>
+            <th className="pb-3 pr-4">Opportunity Score</th>
           </tr>
         </thead>
         <tbody>
@@ -318,13 +318,13 @@ function OverviewPage() {
         apiGet(ADMIN_ROUTES.OVERVIEW)
       ]);
       const [statusData, overviewData] = await Promise.all([
-        parseApiResponse<StatusResponse>(statusRes, "状態を取得できませんでした"),
-        parseApiResponse<OverviewResponse>(overviewRes, "概要を取得できませんでした")
+        parseApiResponse<StatusResponse>(statusRes, "Failed to load status"),
+        parseApiResponse<OverviewResponse>(overviewRes, "Failed to load overview")
       ]);
       setStatus(statusData);
       setOverview(overviewData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "概要を取得できませんでした");
+      setError(err instanceof Error ? err.message : "Failed to load overview");
     } finally {
       setLoading(false);
     }
@@ -339,19 +339,19 @@ function OverviewPage() {
 
   return (
     <Shell
-      title="コンテンツ改善インサイト"
-      description="Search Console と GA4 の統合データから、改善余地の大きいページを優先表示します。"
-      actions={<Button variant="secondary" onClick={() => void load()} disabled={loading}>再読み込み</Button>}
+      title="Content Insights"
+      description="Prioritize pages with the clearest opportunities using combined Search Console and GA4 data."
+      actions={<Button variant="secondary" onClick={() => void load()} disabled={loading}>Reload</Button>}
     >
       <ErrorBanner message={error} />
       {!status?.config ? (
-        <Section title="未設定" subtitle="最初に Settings で Google 接続情報を保存してください。">
+        <Section title="Not Configured" subtitle="Save your Google connection settings first.">
           <div className="text-sm text-muted-foreground">
-            設定保存後に手動同期を実行すると、この画面に集計が表示されます。
+            After saving the configuration, run a manual sync to populate this dashboard.
           </div>
         </Section>
       ) : null}
-      <Section title="最新状態" subtitle="同期の鮮度とデータソースの更新日です。">
+      <Section title="Freshness" subtitle="Track the latest sync and the effective source dates.">
         <div className="grid gap-4 md:grid-cols-4">
           <StatCard label="Last Sync" value={formatDateTime(freshness.lastSyncedAt)} note={statusLabel(freshness.lastStatus)} />
           <StatCard label="GSC Final Date" value={freshness.lastGscDate || "-"} />
@@ -359,7 +359,7 @@ function OverviewPage() {
           <StatCard label="Service Account" value={status?.config?.serviceAccountEmail || "-"} />
         </div>
       </Section>
-      <Section title="全体KPI" subtitle="直近 28 日の公開ページ合計です。">
+      <Section title="KPI Snapshot" subtitle="Aggregated totals for the last 28 days across public pages.">
         <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
           <StatCard label="GSC Clicks" value={formatInteger(summary?.totals.gscClicks28d ?? 0)} />
           <StatCard label="GSC Impressions" value={formatInteger(summary?.totals.gscImpressions28d ?? 0)} />
@@ -370,14 +370,14 @@ function OverviewPage() {
         </div>
       </Section>
       <div className="grid gap-6 xl:grid-cols-2">
-        <Section title="改善候補トップ5" subtitle="管理対象コンテンツのみです。">
-          <MetricTable items={overview?.topOpportunities ?? []} emptyMessage="改善候補はまだありません。" />
+        <Section title="Top Opportunities" subtitle="Managed content only.">
+          <MetricTable items={overview?.topOpportunities ?? []} emptyMessage="No opportunities yet." />
         </Section>
-        <Section title="未管理ページの上位流入" subtitle="公開ページ全体のうち EmDash 管理外のページです。">
-          <MetricTable items={overview?.topUnmanaged ?? []} emptyMessage="未管理ページのデータはまだありません。" />
+        <Section title="Top Unmanaged Pages" subtitle="Public pages outside EmDash-managed content.">
+          <MetricTable items={overview?.topUnmanaged ?? []} emptyMessage="No unmanaged page data yet." />
         </Section>
       </div>
-      <Section title="集計期間" subtitle="API 返却でも同じ window を返します。">
+      <Section title="Reporting Windows" subtitle="The agent API returns the same windows.">
         <div className="grid gap-4 md:grid-cols-2">
           <WindowCard label="GSC Current" value={summary?.window.gscCurrent} />
           <WindowCard label="GSC Previous" value={summary?.window.gscPrevious} />
@@ -409,14 +409,14 @@ function PagesPage() {
         hasOpportunity,
         limit: 100
       });
-      const data = await parseApiResponse<PageListResponse>(response, "ページ一覧を取得できませんでした");
+      const data = await parseApiResponse<PageListResponse>(response, "Failed to load page list");
       setPages(data.items);
       if (selected) {
         const nextSelected = data.items.find((item) => item.urlPath === selected.urlPath) || null;
         setSelected(nextSelected);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "ページ一覧を取得できませんでした");
+      setError(err instanceof Error ? err.message : "Failed to load page list");
     } finally {
       setLoading(false);
     }
@@ -438,7 +438,7 @@ function PagesPage() {
           collection: selected.contentCollection,
           id: selected.contentId
         });
-        const data = await parseApiResponse<Record<string, unknown>>(response, "詳細を取得できませんでした");
+        const data = await parseApiResponse<Record<string, unknown>>(response, "Failed to load details");
         if (!cancelled) setDetail(data);
       } catch {
         if (!cancelled) setDetail(null);
@@ -450,37 +450,37 @@ function PagesPage() {
   }, [selected]);
 
   return (
-    <Shell title="ページ一覧" description="公開ページ全体を見ながら、managed / unmanaged を切り替えて改善対象を絞り込みます。">
+    <Shell title="Pages" description="Explore all public pages and filter down to the content that needs attention.">
       <ErrorBanner message={error} />
-      <Section title="フィルタ">
+      <Section title="Filters">
         <div className="grid gap-4 md:grid-cols-4">
-          <Field label="対象">
+          <Field label="Scope">
             <Select
               value={managed}
               onChange={(value) => setManaged(value as typeof managed)}
               options={[
-                { value: "all", label: "すべて" },
-                { value: "managed", label: "EmDash 管理のみ" },
-                { value: "unmanaged", label: "EmDash 管理外のみ" }
+                { value: "all", label: "All Pages" },
+                { value: "managed", label: "Managed Only" },
+                { value: "unmanaged", label: "Unmanaged Only" }
               ]}
             />
           </Field>
-          <Field label="ページ種別">
+          <Field label="Page Type">
             <Select
               value={pageKind}
               onChange={(value) => setPageKind(value as typeof pageKind)}
               options={[
-                { value: "all", label: "すべて" },
-                { value: "blog_post", label: "ブログ記事" },
-                { value: "blog_archive", label: "ブログ一覧" },
-                { value: "tag", label: "タグ" },
-                { value: "author", label: "著者" },
-                { value: "landing", label: "公開ページ" },
-                { value: "other", label: "その他" }
+                { value: "all", label: "All Types" },
+                { value: "blog_post", label: "Blog Post" },
+                { value: "blog_archive", label: "Blog Archive" },
+                { value: "tag", label: "Tag" },
+                { value: "author", label: "Author" },
+                { value: "landing", label: "Landing" },
+                { value: "other", label: "Other" }
               ]}
             />
           </Field>
-          <Field label="改善候補のみ">
+          <Field label="Opportunities Only">
             <div className="flex h-10 items-center">
               <input
                 type="checkbox"
@@ -492,18 +492,18 @@ function PagesPage() {
           </Field>
           <div className="flex items-end">
             <Button variant="secondary" onClick={() => void load()} disabled={loading}>
-              絞り込みを更新
+              Apply Filters
             </Button>
           </div>
         </div>
       </Section>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.9fr)]">
-        <Section title="ページテーブル" subtitle={loading ? "読み込み中です。" : `${pages.length} 件を表示しています。`}>
+        <Section title="Page Table" subtitle={loading ? "Loading..." : `Showing ${pages.length} pages.`}>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="text-left text-xs uppercase tracking-[0.16em] text-muted-foreground">
                 <tr>
-                  <th className="pb-3 pr-4">ページ</th>
+                  <th className="pb-3 pr-4">Page</th>
                   <th className="pb-3 pr-4">Managed</th>
                   <th className="pb-3 pr-4">GSC CTR</th>
                   <th className="pb-3 pr-4">GA Views</th>
@@ -531,9 +531,9 @@ function PagesPage() {
             </table>
           </div>
         </Section>
-        <Section title="選択中のページ" subtitle="managed ページを選ぶと query と opportunity evidence も表示します。">
+        <Section title="Selected Page" subtitle="Managed pages also show query data and opportunity evidence.">
           {!selected ? (
-            <div className="text-sm text-muted-foreground">左の表からページを選択してください。</div>
+            <div className="text-sm text-muted-foreground">Select a page from the table.</div>
           ) : (
             <div className="space-y-4">
               <div>
@@ -556,7 +556,7 @@ function PagesPage() {
                       </span>
                     ))
                   ) : (
-                    <span className="text-sm text-muted-foreground">タグはありません。</span>
+                    <span className="text-sm text-muted-foreground">No tags.</span>
                   )}
                 </div>
               </div>
@@ -588,8 +588,8 @@ function SettingsPage() {
         apiGet(ADMIN_ROUTES.AGENT_KEYS_LIST)
       ]);
       const [config, agentKeys] = await Promise.all([
-        parseApiResponse<PluginConfigSummary>(configRes, "設定を取得できませんでした"),
-        parseApiResponse<AgentKeyListItem[]>(keysRes, "API key 一覧を取得できませんでした")
+        parseApiResponse<PluginConfigSummary>(configRes, "Failed to load settings"),
+        parseApiResponse<AgentKeyListItem[]>(keysRes, "Failed to load API keys")
       ]);
       setDraft({
         siteOrigin: config.siteOrigin || "",
@@ -599,7 +599,7 @@ function SettingsPage() {
       });
       setKeys(agentKeys);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "設定を取得できませんでした");
+      setError(err instanceof Error ? err.message : "Failed to load settings");
     } finally {
       setLoading(false);
     }
@@ -615,11 +615,11 @@ function SettingsPage() {
     setSuccess(null);
     try {
       const response = await apiPost<PluginConfigSummary>(ADMIN_ROUTES.CONFIG_SAVE, draft);
-      await parseApiResponse<PluginConfigSummary>(response, "設定を保存できませんでした");
+      await parseApiResponse<PluginConfigSummary>(response, "Failed to save settings");
       setDraft((current) => ({ ...current, serviceAccountJson: "" }));
-      setSuccess("接続設定を保存しました。");
+      setSuccess("Settings saved.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "設定を保存できませんでした");
+      setError(err instanceof Error ? err.message : "Failed to save settings");
     } finally {
       setBusy(null);
     }
@@ -638,10 +638,10 @@ function SettingsPage() {
             gscSiteUrl: draft.gscSiteUrl
           };
       const response = await apiPost<Record<string, unknown>>(ADMIN_ROUTES.CONNECTION_TEST, payload);
-      await parseApiResponse<Record<string, unknown>>(response, "接続テストに失敗しました");
-      setSuccess("Google Search Console / GA4 への接続に成功しました。");
+      await parseApiResponse<Record<string, unknown>>(response, "Connection test failed");
+      setSuccess("Connection test succeeded.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "接続テストに失敗しました");
+      setError(err instanceof Error ? err.message : "Connection test failed");
     } finally {
       setBusy(null);
     }
@@ -653,10 +653,10 @@ function SettingsPage() {
     setSuccess(null);
     try {
       const response = await apiPost<Record<string, unknown>>(ADMIN_ROUTES.SYNC_NOW);
-      await parseApiResponse<Record<string, unknown>>(response, "手動同期に失敗しました");
-      setSuccess("同期を開始しました。完了後に Overview を再読み込みしてください。");
+      await parseApiResponse<Record<string, unknown>>(response, "Manual sync failed");
+      setSuccess("Manual sync started. Reload Overview after it completes.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "手動同期に失敗しました");
+      setError(err instanceof Error ? err.message : "Manual sync failed");
     } finally {
       setBusy(null);
     }
@@ -671,13 +671,13 @@ function SettingsPage() {
       const response = await apiPost<AgentKeyCreateResponse>(ADMIN_ROUTES.AGENT_KEYS_CREATE, {
         label: newKeyLabel.trim()
       });
-      const data = await parseApiResponse<AgentKeyCreateResponse>(response, "API key を作成できませんでした");
+      const data = await parseApiResponse<AgentKeyCreateResponse>(response, "Failed to create API key");
       setGeneratedKey(data.key);
       setNewKeyLabel("");
-      setSuccess("新しい Agent API key を作成しました。表示は今回限りです。");
+      setSuccess("Created a new agent API key. This is the only time the raw key will be shown.");
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "API key を作成できませんでした");
+      setError(err instanceof Error ? err.message : "Failed to create API key");
     } finally {
       setBusy(null);
     }
@@ -689,11 +689,11 @@ function SettingsPage() {
     setSuccess(null);
     try {
       const response = await apiPost<{ success: true }>(ADMIN_ROUTES.AGENT_KEYS_REVOKE, { prefix });
-      await parseApiResponse<{ success: true }>(response, "API key を失効できませんでした");
-      setSuccess(`${prefix} を失効しました。`);
+      await parseApiResponse<{ success: true }>(response, "Failed to revoke API key");
+      setSuccess(`Revoked ${prefix}.`);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "API key を失効できませんでした");
+      setError(err instanceof Error ? err.message : "Failed to revoke API key");
     } finally {
       setBusy(null);
     }
@@ -701,27 +701,27 @@ function SettingsPage() {
 
   return (
     <Shell
-      title="設定"
-      description="Google 接続情報の保存、手動同期、agent 向け API key 管理を行います。"
-      actions={<Button variant="secondary" onClick={() => void load()} disabled={loading}>再読み込み</Button>}
+      title="Settings"
+      description="Manage Google connection settings, manual sync, and agent API keys."
+      actions={<Button variant="secondary" onClick={() => void load()} disabled={loading}>Reload</Button>}
     >
       <ErrorBanner message={error} />
       <SuccessBanner message={success} />
-      <Section title="Google 接続">
+      <Section title="Google Connection">
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Canonical Site Origin" hint="例: https://www.yourbright.co.jp">
+          <Field label="Canonical Site Origin" hint="Example: https://www.yourbright.co.jp">
             <Input value={draft.siteOrigin} onChange={(value) => setDraft((current) => ({ ...current, siteOrigin: value }))} />
           </Field>
-          <Field label="GA4 Property ID" hint="数値の property ID を入力します。">
+          <Field label="GA4 Property ID" hint="Enter the numeric property ID.">
             <Input value={draft.ga4PropertyId} onChange={(value) => setDraft((current) => ({ ...current, ga4PropertyId: value }))} />
           </Field>
           <div className="md:col-span-2">
-            <Field label="Search Console Property" hint="例: https://www.yourbright.co.jp/ または sc-domain:yourbright.co.jp">
+            <Field label="Search Console Property" hint="Example: https://www.yourbright.co.jp/ or sc-domain:yourbright.co.jp">
               <Input value={draft.gscSiteUrl} onChange={(value) => setDraft((current) => ({ ...current, gscSiteUrl: value }))} />
             </Field>
           </div>
           <div className="md:col-span-2">
-            <Field label="Service Account JSON" hint="保存時には暗号化します。既存 secret を維持したい場合は空のままにしてください。">
+            <Field label="Service Account JSON" hint="Encrypted on save. Leave blank to keep the current secret.">
               <TextArea
                 value={draft.serviceAccountJson}
                 onChange={(value) => setDraft((current) => ({ ...current, serviceAccountJson: value }))}
@@ -733,30 +733,30 @@ function SettingsPage() {
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           <Button onClick={() => void save()} disabled={!!busy}>
-            {busy === "save" ? "保存中..." : "保存"}
+            {busy === "save" ? "Saving..." : "Save"}
           </Button>
           <Button variant="secondary" onClick={() => void testConnection()} disabled={!!busy}>
-            {busy === "test" ? "テスト中..." : "接続テスト"}
+            {busy === "test" ? "Testing..." : "Test Connection"}
           </Button>
           <Button variant="secondary" onClick={() => void syncNow()} disabled={!!busy}>
-            {busy === "sync" ? "同期中..." : "手動同期"}
+            {busy === "sync" ? "Syncing..." : "Run Manual Sync"}
           </Button>
         </div>
       </Section>
-      <Section title="Agent API Key" subtitle="Bearer yb_ins_... 形式で利用します。raw key は作成時に一度だけ表示されます。">
+      <Section title="Agent API Keys" subtitle="Use these as Bearer yb_ins_... tokens. Raw keys are shown only once.">
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
-          <Field label="新しい key のラベル">
+          <Field label="New key label">
             <Input value={newKeyLabel} onChange={setNewKeyLabel} placeholder="content-feedback-agent" />
           </Field>
           <div className="flex items-end">
             <Button onClick={() => void createKey()} disabled={!!busy || !newKeyLabel.trim()}>
-              {busy === "create-key" ? "作成中..." : "Key を作成"}
+              {busy === "create-key" ? "Creating..." : "Create Key"}
             </Button>
           </div>
         </div>
         {generatedKey ? (
           <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
-            <div className="text-sm font-medium text-amber-900">作成済みキー</div>
+            <div className="text-sm font-medium text-amber-900">Generated Key</div>
             <div className="mt-2 break-all font-mono text-sm text-amber-900">{generatedKey}</div>
           </div>
         ) : null}
@@ -783,7 +783,7 @@ function SettingsPage() {
                   <td className="py-3 pr-4">
                     {key.revokedAt ? null : (
                       <Button variant="danger" onClick={() => void revokeKey(key.prefix)} disabled={busy === key.prefix}>
-                        失効
+                        Revoke
                       </Button>
                     )}
                   </td>
@@ -806,10 +806,10 @@ function ContentOpportunitiesWidget() {
     (async () => {
       try {
         const response = await apiGet(ADMIN_ROUTES.OVERVIEW);
-        const data = await parseApiResponse<OverviewResponse>(response, "Widget data を取得できませんでした");
+        const data = await parseApiResponse<OverviewResponse>(response, "Failed to load widget data");
         if (!cancelled) setOverview(data);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Widget data を取得できませんでした");
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load widget data");
       }
     })();
     return () => {
@@ -830,7 +830,7 @@ function ContentOpportunitiesWidget() {
         <StatCard label="GSC Clicks" value={formatInteger(summary?.totals.gscClicks28d ?? 0)} />
         <StatCard label="GA Views" value={formatInteger(summary?.totals.gaViews28d ?? 0)} />
       </div>
-      <MetricTable items={overview?.topOpportunities ?? []} emptyMessage="改善候補はまだありません。" />
+      <MetricTable items={overview?.topOpportunities ?? []} emptyMessage="No opportunities yet." />
     </div>
   );
 }
@@ -857,7 +857,7 @@ function DetailBlock({ detail }: { detail: Record<string, unknown> }) {
             })}
           </ul>
         ) : (
-          <div className="text-sm text-muted-foreground">Opportunity evidence はまだありません。</div>
+          <div className="text-sm text-muted-foreground">No opportunity evidence yet.</div>
         )}
       </div>
       <div className="space-y-2">
@@ -889,7 +889,7 @@ function DetailBlock({ detail }: { detail: Record<string, unknown> }) {
             </table>
           </div>
         ) : (
-          <div className="text-sm text-muted-foreground">query データはまだありません。</div>
+          <div className="text-sm text-muted-foreground">No query data yet.</div>
         )}
       </div>
     </div>
@@ -937,30 +937,30 @@ function formatDateTime(value: string | null | undefined): string {
 function pageKindLabel(pageKind: PageKind): string {
   switch (pageKind) {
     case "blog_post":
-      return "ブログ記事";
+      return "Blog Post";
     case "blog_archive":
-      return "ブログ一覧";
+      return "Blog Archive";
     case "tag":
-      return "タグ";
+      return "Tag";
     case "author":
-      return "著者";
+      return "Author";
     case "landing":
-      return "公開ページ";
+      return "Landing";
     default:
-      return "その他";
+      return "Other";
   }
 }
 
 function statusLabel(status: FreshnessState["lastStatus"]): string {
   switch (status) {
     case "success":
-      return "正常";
+      return "Healthy";
     case "degraded":
-      return "一部失敗";
+      return "Degraded";
     case "error":
-      return "失敗";
+      return "Failed";
     default:
-      return "未実行";
+      return "Idle";
   }
 }
 
