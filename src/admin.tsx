@@ -153,16 +153,16 @@ function Button({
 }) {
   const styles =
     variant === "primary"
-      ? "bg-foreground text-background hover:opacity-90"
+      ? "border border-slate-900 bg-slate-900 text-white shadow-sm hover:bg-slate-800"
       : variant === "danger"
-        ? "bg-red-600 text-white hover:bg-red-700"
-        : "border border-border bg-background text-foreground hover:bg-accent";
+        ? "border border-red-700 bg-red-600 text-white shadow-sm hover:bg-red-700"
+        : "border border-slate-300 bg-white text-slate-900 shadow-sm hover:bg-slate-50";
   return (
     <button
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${styles}`}
+      className={`inline-flex min-h-11 items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${styles}`}
     >
       {children}
     </button>
@@ -730,22 +730,16 @@ function SettingsPage() {
             </Field>
           </div>
         </div>
-        <div className="mt-6 rounded-xl border border-border bg-accent/30 p-4">
-          <div className="mb-3 text-sm font-medium">Actions</div>
-          <div className="mb-4 text-xs text-muted-foreground">
-            Save settings first. Then test the connection or run a sync.
-          </div>
-          <div className="grid gap-3 md:grid-cols-3">
-            <Button onClick={() => void save()} disabled={!!busy}>
-              {busy === "save" ? "Saving..." : "Save Settings"}
-            </Button>
-            <Button variant="secondary" onClick={() => void testConnection()} disabled={!!busy}>
-              {busy === "test" ? "Testing..." : "Test Connection"}
-            </Button>
-            <Button variant="secondary" onClick={() => void syncNow()} disabled={!!busy}>
-              {busy === "sync" ? "Syncing..." : "Run Manual Sync"}
-            </Button>
-          </div>
+        <div className="mt-6 flex flex-wrap gap-3 border-t border-border pt-4">
+          <Button onClick={() => void save()} disabled={!!busy}>
+            {busy === "save" ? "Saving..." : "Save Settings"}
+          </Button>
+          <Button variant="secondary" onClick={() => void testConnection()} disabled={!!busy}>
+            {busy === "test" ? "Testing..." : "Test Connection"}
+          </Button>
+          <Button variant="secondary" onClick={() => void syncNow()} disabled={!!busy}>
+            {busy === "sync" ? "Syncing..." : "Run Manual Sync"}
+          </Button>
         </div>
       </Section>
       <Section title="Agent API Keys" subtitle="Use these as Bearer yb_ins_... tokens. Raw keys are shown only once.">
