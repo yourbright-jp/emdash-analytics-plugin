@@ -1,4 +1,4 @@
-export const PLUGIN_ID = "yb-content-insights";
+export const PLUGIN_ID = "emdash-google-analytics-dashboard";
 export const PLUGIN_VERSION = "0.1.0";
 export const AGENT_KEY_PREFIX = "yb_ins_";
 
