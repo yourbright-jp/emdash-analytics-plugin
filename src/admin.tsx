@@ -703,19 +703,6 @@ function SettingsPage() {
     <Shell
       title="Settings"
       description="Manage Google connection settings, manual sync, and agent API keys."
-      actions={
-        <>
-          <Button onClick={() => void save()} disabled={!!busy}>
-            {busy === "save" ? "Saving..." : "Save"}
-          </Button>
-          <Button variant="secondary" onClick={() => void testConnection()} disabled={!!busy}>
-            {busy === "test" ? "Testing..." : "Test Connection"}
-          </Button>
-          <Button variant="secondary" onClick={() => void syncNow()} disabled={!!busy}>
-            {busy === "sync" ? "Syncing..." : "Run Manual Sync"}
-          </Button>
-        </>
-      }
     >
       <ErrorBanner message={error} />
       <SuccessBanner message={success} />
@@ -743,16 +730,22 @@ function SettingsPage() {
             </Field>
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4">
-          <Button onClick={() => void save()} disabled={!!busy}>
-            {busy === "save" ? "Saving..." : "Save"}
-          </Button>
-          <Button variant="secondary" onClick={() => void testConnection()} disabled={!!busy}>
-            {busy === "test" ? "Testing..." : "Test Connection"}
-          </Button>
-          <Button variant="secondary" onClick={() => void syncNow()} disabled={!!busy}>
-            {busy === "sync" ? "Syncing..." : "Run Manual Sync"}
-          </Button>
+        <div className="mt-6 rounded-xl border border-border bg-accent/30 p-4">
+          <div className="mb-3 text-sm font-medium">Actions</div>
+          <div className="mb-4 text-xs text-muted-foreground">
+            Save settings first. Then test the connection or run a sync.
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <Button onClick={() => void save()} disabled={!!busy}>
+              {busy === "save" ? "Saving..." : "Save Settings"}
+            </Button>
+            <Button variant="secondary" onClick={() => void testConnection()} disabled={!!busy}>
+              {busy === "test" ? "Testing..." : "Test Connection"}
+            </Button>
+            <Button variant="secondary" onClick={() => void syncNow()} disabled={!!busy}>
+              {busy === "sync" ? "Syncing..." : "Run Manual Sync"}
+            </Button>
+          </div>
         </div>
       </Section>
       <Section title="Agent API Keys" subtitle="Use these as Bearer yb_ins_... tokens. Raw keys are shown only once.">
