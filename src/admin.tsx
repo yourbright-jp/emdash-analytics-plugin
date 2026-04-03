@@ -703,7 +703,19 @@ function SettingsPage() {
     <Shell
       title="Settings"
       description="Manage Google connection settings, manual sync, and agent API keys."
-      actions={<Button variant="secondary" onClick={() => void load()} disabled={loading}>Reload</Button>}
+      actions={
+        <>
+          <Button onClick={() => void save()} disabled={!!busy}>
+            {busy === "save" ? "Saving..." : "Save"}
+          </Button>
+          <Button variant="secondary" onClick={() => void testConnection()} disabled={!!busy}>
+            {busy === "test" ? "Testing..." : "Test Connection"}
+          </Button>
+          <Button variant="secondary" onClick={() => void syncNow()} disabled={!!busy}>
+            {busy === "sync" ? "Syncing..." : "Run Manual Sync"}
+          </Button>
+        </>
+      }
     >
       <ErrorBanner message={error} />
       <SuccessBanner message={success} />
@@ -731,7 +743,7 @@ function SettingsPage() {
             </Field>
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4">
           <Button onClick={() => void save()} disabled={!!busy}>
             {busy === "save" ? "Saving..." : "Save"}
           </Button>
