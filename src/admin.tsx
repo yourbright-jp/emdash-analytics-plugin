@@ -153,15 +153,28 @@ function Button({
 }) {
   const styles =
     variant === "primary"
-      ? "border border-blue-700 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+      ? "border text-white shadow-sm"
       : variant === "danger"
-        ? "border border-red-700 bg-red-600 text-white shadow-sm hover:bg-red-700"
+        ? "border text-white shadow-sm"
         : "border border-slate-300 bg-white text-slate-900 shadow-sm hover:bg-slate-50";
+  const style =
+    variant === "primary"
+      ? {
+          backgroundColor: "var(--color-kumo-brand)",
+          borderColor: "var(--color-kumo-brand)"
+        }
+      : variant === "danger"
+        ? {
+            backgroundColor: "var(--color-kumo-danger)",
+            borderColor: "var(--color-kumo-danger)"
+          }
+        : undefined;
   return (
     <button
       type={type}
       onClick={onClick}
       disabled={disabled}
+      style={style}
       className={`inline-flex min-h-11 items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${styles}`}
     >
       {children}
