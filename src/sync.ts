@@ -18,7 +18,6 @@ import {
   classifyPageKind,
   dailyMetricStorageId,
   getManagedContentMap,
-  resolveManagedContent,
   pageQueryStorageId,
   pageStorageId
 } from "./content.js";
@@ -429,15 +428,7 @@ export async function getContentContext(
   }
 
   const contentRef =
-    (await resolveContentRef(config.siteOrigin, page, collection, id, slug)) || {
-      collection: "posts",
-      id: page.contentId || id || pageStorageId(page.urlPath),
-      slug: page.contentSlug || slug || null,
-      urlPath: page.urlPath,
-      title: page.title,
-      excerpt: undefined,
-      seoDescription: undefined
-    };
+    resolveStoredContentRef(page, collection, id, slug);
 
   const queries = await getFreshQueriesForPage(ctx, config, contentRef.urlPath);
   const windows = buildWindows();
@@ -619,35 +610,12 @@ async function findContentPage(
   return null;
 }
 
-async function resolveContentRef(
-  siteOrigin: string,
+function resolveStoredContentRef(
   page: PageAggregateRecord,
   collection: string,
   id?: string,
   slug?: string
-): Promise<ManagedContentRef | null> {
-  if (collection !== "posts") {
-    return {
-      collection: "posts",
-      id: page.contentId || id || pageStorageId(page.urlPath),
-      slug: page.contentSlug || slug || null,
-      urlPath: page.urlPath,
-      title: page.title,
-      excerpt: undefined,
-      seoDescription: undefined
-    };
-  }
-
-  const resolved = await resolveManagedContent(
-    collection,
-    page.contentId || id,
-    page.contentSlug || slug || undefined,
-    siteOrigin
-  );
-  if (resolved) {
-    return resolved;
-  }
-
+): ManagedContentRef {
   return {
     collection: "posts",
     id: page.contentId || id || pageStorageId(page.urlPath),
