@@ -18,6 +18,7 @@ import {
   classifyPageKind,
   dailyMetricStorageId,
   getManagedContentMap,
+  resolveManagedContent,
   pageQueryStorageId,
   pageStorageId
 } from "./content.js";
@@ -422,29 +423,21 @@ export async function getContentContext(
   slug?: string
 ): Promise<ContentContextResponse> {
   const config = await requireConfig(ctx);
-  const managedMap = await getManagedContentMap(config.siteOrigin);
-  let contentRef: ManagedContentRef | null = null;
-
-  if (id) {
-    contentRef =
-      Array.from(managedMap.values()).find(
-        (entry) => entry.collection === collection && entry.id === id
-      ) || null;
-  }
-  if (!contentRef && slug) {
-    contentRef =
-      Array.from(managedMap.values()).find(
-        (entry) => entry.collection === collection && entry.slug === slug
-      ) || null;
-  }
-  if (!contentRef) {
-    throw new PluginRouteError("NOT_FOUND", "Managed content not found", 404);
-  }
-
-  const page = await loadPage(ctx, contentRef.urlPath);
+  const page = await findContentPage(ctx, collection, id, slug);
   if (!page) {
     throw new PluginRouteError("NOT_FOUND", "Analytics data not found for content", 404);
   }
+
+  const contentRef =
+    (await resolveContentRef(config.siteOrigin, page, collection, id, slug)) || {
+      collection: "posts",
+      id: page.contentId || id || pageStorageId(page.urlPath),
+      slug: page.contentSlug || slug || null,
+      urlPath: page.urlPath,
+      title: page.title,
+      excerpt: undefined,
+      seoDescription: undefined
+    };
 
   const queries = await getFreshQueriesForPage(ctx, config, contentRef.urlPath);
   const windows = buildWindows();
@@ -593,6 +586,79 @@ async function requireConfig(ctx: PluginCtx): Promise<SavedPluginConfig> {
 async function loadPage(ctx: PluginCtx, urlPath: string): Promise<PageAggregateRecord | null> {
   const page = await ctx.storage.pages.get(pageStorageId(urlPath));
   return (page as PageAggregateRecord | null) ?? null;
+}
+
+async function findContentPage(
+  ctx: PluginCtx,
+  collection: string,
+  id?: string,
+  slug?: string
+): Promise<PageAggregateRecord | null> {
+  if (id) {
+    const byId = await ctx.storage.pages.query({
+      where: {
+        contentCollection: collection,
+        contentId: id
+      },
+      limit: 1
+    });
+    const match = byId.items[0]?.data as PageAggregateRecord | undefined;
+    if (match) return match;
+  }
+
+  if (slug) {
+    const bySlug = await ctx.storage.pages.query({
+      where: {
+        contentCollection: collection,
+        contentSlug: slug
+      },
+      limit: 1
+    });
+    const match = bySlug.items[0]?.data as PageAggregateRecord | undefined;
+    if (match) return match;
+  }
+
+  return null;
+}
+
+async function resolveContentRef(
+  siteOrigin: string,
+  page: PageAggregateRecord,
+  collection: string,
+  id?: string,
+  slug?: string
+): Promise<ManagedContentRef | null> {
+  if (collection !== "posts") {
+    return {
+      collection: "posts",
+      id: page.contentId || id || pageStorageId(page.urlPath),
+      slug: page.contentSlug || slug || null,
+      urlPath: page.urlPath,
+      title: page.title,
+      excerpt: undefined,
+      seoDescription: undefined
+    };
+  }
+
+  const resolved = await resolveManagedContent(
+    collection,
+    page.contentId || id,
+    page.contentSlug || slug || undefined,
+    siteOrigin
+  );
+  if (resolved) {
+    return resolved;
+  }
+
+  return {
+    collection: "posts",
+    id: page.contentId || id || pageStorageId(page.urlPath),
+    slug: page.contentSlug || slug || null,
+    urlPath: page.urlPath,
+    title: page.title,
+    excerpt: undefined,
+    seoDescription: undefined
+  };
 }
 
 async function getFreshQueriesForPage(
