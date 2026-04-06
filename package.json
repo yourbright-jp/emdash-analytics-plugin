@@ -1,6 +1,6 @@
 {
   "name": "@yourbright/emdash-analytics-plugin",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Google Search Console and GA4 analytics plugin for EmDash",
   "type": "module",
   "main": "./dist/index.js",

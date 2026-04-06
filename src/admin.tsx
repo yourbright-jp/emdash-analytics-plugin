@@ -272,18 +272,24 @@ function AnalyticsTabs({
   ];
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div
+      role="tablist"
+      aria-label="Analytics sections"
+      className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-border bg-accent/60 p-1 shadow-sm"
+    >
       {tabs.map((tab) => {
         const active = tab.key === section;
         return (
           <button
             key={tab.key}
             type="button"
+            role="tab"
+            aria-selected={active}
             onClick={() => onChange(tab.key)}
-            className={`rounded-full border px-3 py-2 text-sm font-medium transition ${
+            className={`min-h-10 rounded-lg px-4 py-2 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-foreground/20 ${
               active
-                ? "border-foreground bg-foreground text-background"
-                : "border-border bg-background text-foreground hover:bg-accent"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-background/80 hover:text-foreground"
             }`}
           >
             {tab.label}
