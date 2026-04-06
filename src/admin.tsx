@@ -714,7 +714,7 @@ function SettingsPage() {
 
   return (
     <Shell
-      title="Settings"
+      title="Analytics"
       description="Manage Google connection settings, manual sync, and agent API keys."
     >
       <ErrorBanner message={error} />

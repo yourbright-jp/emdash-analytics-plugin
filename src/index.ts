@@ -79,7 +79,7 @@ export function contentInsightsPlugin(): PluginDescriptor {
     adminPages: [
       { path: "/", label: "Overview", icon: "chart-bar" },
       { path: "/pages", label: "Pages", icon: "list" },
-      { path: "/settings", label: "Settings", icon: "gear" }
+      { path: "/settings", label: "Analytics", icon: "gear" }
     ],
     adminWidgets: [
       { id: "content-opportunities", title: "Content Opportunities", size: "full" }
@@ -266,7 +266,7 @@ export function createPlugin() {
       pages: [
         { path: "/", label: "Overview", icon: "chart-bar" },
         { path: "/pages", label: "Pages", icon: "list" },
-        { path: "/settings", label: "Settings", icon: "gear" }
+        { path: "/settings", label: "Analytics", icon: "gear" }
       ],
       widgets: [
         { id: "content-opportunities", title: "Content Opportunities", size: "full" }
