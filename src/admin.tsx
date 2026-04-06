@@ -1,5 +1,5 @@
 import type { PluginAdminExports } from "emdash";
-import { apiFetch as baseFetch, getErrorMessage, parseApiResponse } from "emdash/plugin-utils";
+import { apiFetch as baseFetch, parseApiResponse } from "emdash/plugin-utils";
 import * as React from "react";
 
 import { ADMIN_ROUTES, PLUGIN_ID } from "./constants.js";
@@ -39,15 +39,88 @@ interface ConfigDraft {
   siteOrigin: string;
   ga4PropertyId: string;
   gscSiteUrl: string;
-  serviceAccountJson: string;
+  serviceAccountClientEmail: string;
+  serviceAccountPrivateKey: string;
+  serviceAccountTokenUri: string;
 }
 
 const EMPTY_CONFIG: ConfigDraft = {
   siteOrigin: "",
   ga4PropertyId: "",
   gscSiteUrl: "",
-  serviceAccountJson: ""
+  serviceAccountClientEmail: "",
+  serviceAccountPrivateKey: "",
+  serviceAccountTokenUri: ""
 };
+
+function validateSettingsDraft(draft: ConfigDraft, hasStoredServiceAccount: boolean): string | null {
+  const siteOrigin = draft.siteOrigin.trim();
+  const ga4PropertyId = draft.ga4PropertyId.trim();
+  const gscSiteUrl = draft.gscSiteUrl.trim();
+  const serviceAccountClientEmail = draft.serviceAccountClientEmail.trim();
+  const serviceAccountPrivateKey = draft.serviceAccountPrivateKey.trim();
+  const serviceAccountTokenUri = draft.serviceAccountTokenUri.trim();
+  const hasServiceAccountReplacement =
+    serviceAccountClientEmail.length > 0 || serviceAccountPrivateKey.length > 0 || serviceAccountTokenUri.length > 0;
+
+  if (!siteOrigin) return "Canonical Site Origin is required";
+  if (!isHttpUrl(siteOrigin)) return "Canonical Site Origin must be a valid http(s) URL";
+  if (!ga4PropertyId) return "GA4 Property ID is required";
+  if (!/^[0-9]+$/.test(ga4PropertyId)) return "GA4 Property ID must be numeric";
+  if (!gscSiteUrl) return "Search Console Property is required";
+  if (!isValidSearchConsoleProperty(gscSiteUrl)) {
+    return "Search Console Property must be a valid URL or sc-domain property";
+  }
+  if (!hasServiceAccountReplacement && !hasStoredServiceAccount) {
+    return "Service account email and private key are required on the first save";
+  }
+  if (hasServiceAccountReplacement) {
+    const serviceAccountError = validateServiceAccountFields({
+      clientEmail: serviceAccountClientEmail,
+      privateKey: serviceAccountPrivateKey,
+      tokenUri: serviceAccountTokenUri
+    });
+    if (serviceAccountError) return serviceAccountError;
+  }
+  return null;
+}
+
+function validateServiceAccountFields({
+  clientEmail,
+  privateKey,
+  tokenUri
+}: {
+  clientEmail: string;
+  privateKey: string;
+  tokenUri: string;
+}): string | null {
+  if (!clientEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail)) {
+    return "Service account email must be a valid email address";
+  }
+  if (!privateKey) {
+    return "Private key is required when updating service account credentials";
+  }
+  if (tokenUri && !isHttpUrl(tokenUri)) {
+    return "Token URI must be a valid http(s) URL";
+  }
+  return null;
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function isValidSearchConsoleProperty(value: string): boolean {
+  if (value.startsWith("sc-domain:")) {
+    return value.slice("sc-domain:".length).trim().length > 0;
+  }
+  return isHttpUrl(value);
+}
 
 function apiPost<T>(route: string, body?: unknown): Promise<Response> {
   return baseFetch(`${API_BASE}/${route}`, {
@@ -59,6 +132,35 @@ function apiPost<T>(route: string, body?: unknown): Promise<Response> {
 
 function apiGet<T>(route: string): Promise<Response> {
   return baseFetch(`${API_BASE}/${route}`);
+}
+
+function buildConfigPayload(draft: ConfigDraft): {
+  siteOrigin: string;
+  ga4PropertyId: string;
+  gscSiteUrl: string;
+  serviceAccountJson?: string;
+} {
+  const payload = {
+    siteOrigin: draft.siteOrigin.trim(),
+    ga4PropertyId: draft.ga4PropertyId.trim(),
+    gscSiteUrl: draft.gscSiteUrl.trim()
+  };
+  const serviceAccountClientEmail = draft.serviceAccountClientEmail.trim();
+  const serviceAccountPrivateKey = draft.serviceAccountPrivateKey.trim();
+  const serviceAccountTokenUri = draft.serviceAccountTokenUri.trim();
+
+  if (!serviceAccountClientEmail && !serviceAccountPrivateKey && !serviceAccountTokenUri) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    serviceAccountJson: JSON.stringify({
+      client_email: serviceAccountClientEmail,
+      private_key: serviceAccountPrivateKey,
+      ...(serviceAccountTokenUri ? { token_uri: serviceAccountTokenUri } : {})
+    })
+  };
 }
 
 function Shell({
@@ -584,6 +686,8 @@ function PagesPage() {
 
 function SettingsPage() {
   const [draft, setDraft] = React.useState<ConfigDraft>(EMPTY_CONFIG);
+  const [hasStoredServiceAccount, setHasStoredServiceAccount] = React.useState(false);
+  const [storedServiceAccountEmail, setStoredServiceAccountEmail] = React.useState<string | null>(null);
   const [keys, setKeys] = React.useState<AgentKeyListItem[]>([]);
   const [newKeyLabel, setNewKeyLabel] = React.useState("");
   const [generatedKey, setGeneratedKey] = React.useState<string | null>(null);
@@ -608,8 +712,12 @@ function SettingsPage() {
         siteOrigin: config.siteOrigin || "",
         ga4PropertyId: config.ga4PropertyId || "",
         gscSiteUrl: config.gscSiteUrl || "",
-        serviceAccountJson: ""
+        serviceAccountClientEmail: "",
+        serviceAccountPrivateKey: "",
+        serviceAccountTokenUri: ""
       });
+      setHasStoredServiceAccount(!!config.hasServiceAccount);
+      setStoredServiceAccountEmail(config.serviceAccountEmail || null);
       setKeys(agentKeys);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load settings");
@@ -623,13 +731,29 @@ function SettingsPage() {
   }, [load]);
 
   const save = async () => {
+    const validationMessage = validateSettingsDraft(draft, hasStoredServiceAccount);
+    if (validationMessage) {
+      setError(validationMessage);
+      setSuccess(null);
+      return;
+    }
     setBusy("save");
     setError(null);
     setSuccess(null);
     try {
-      const response = await apiPost<PluginConfigSummary>(ADMIN_ROUTES.CONFIG_SAVE, draft);
-      await parseApiResponse<PluginConfigSummary>(response, "Failed to save settings");
-      setDraft((current) => ({ ...current, serviceAccountJson: "" }));
+      const payload = buildConfigPayload(draft);
+      const config = await parseApiResponse<PluginConfigSummary>(
+        await apiPost<PluginConfigSummary>(ADMIN_ROUTES.CONFIG_SAVE, payload),
+        "Failed to save settings"
+      );
+      setDraft((current) => ({
+        ...current,
+        serviceAccountClientEmail: "",
+        serviceAccountPrivateKey: "",
+        serviceAccountTokenUri: ""
+      }));
+      setHasStoredServiceAccount(true);
+      setStoredServiceAccountEmail(config.serviceAccountEmail || storedServiceAccountEmail);
       setSuccess("Settings saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save settings");
@@ -639,18 +763,17 @@ function SettingsPage() {
   };
 
   const testConnection = async () => {
+    const validationMessage = validateSettingsDraft(draft, hasStoredServiceAccount);
+    if (validationMessage) {
+      setError(validationMessage);
+      setSuccess(null);
+      return;
+    }
     setBusy("test");
     setError(null);
     setSuccess(null);
     try {
-      const payload = draft.serviceAccountJson.trim()
-        ? draft
-        : {
-            siteOrigin: draft.siteOrigin,
-            ga4PropertyId: draft.ga4PropertyId,
-            gscSiteUrl: draft.gscSiteUrl
-          };
-      const response = await apiPost<Record<string, unknown>>(ADMIN_ROUTES.CONNECTION_TEST, payload);
+      const response = await apiPost<Record<string, unknown>>(ADMIN_ROUTES.CONNECTION_TEST, buildConfigPayload(draft));
       await parseApiResponse<Record<string, unknown>>(response, "Connection test failed");
       setSuccess("Connection test succeeded.");
     } catch (err) {
@@ -733,12 +856,37 @@ function SettingsPage() {
             </Field>
           </div>
           <div className="md:col-span-2">
-            <Field label="Service Account JSON" hint="Encrypted on save. Leave blank to keep the current secret.">
+            <Field
+              label="Service Account Email"
+              hint={
+                hasStoredServiceAccount
+                  ? `Current: ${storedServiceAccountEmail || "configured"}. Fill both credential fields only when rotating the service account.`
+                  : "Required on the first save."
+              }
+            >
+              <Input
+                value={draft.serviceAccountClientEmail}
+                onChange={(value) => setDraft((current) => ({ ...current, serviceAccountClientEmail: value }))}
+                placeholder="emdash-analytics@project-id.iam.gserviceaccount.com"
+              />
+            </Field>
+          </div>
+          <div className="md:col-span-2">
+            <Field label="Private Key" hint="PEM value from the Google service account credential. Leave blank to keep the current secret.">
               <TextArea
-                value={draft.serviceAccountJson}
-                onChange={(value) => setDraft((current) => ({ ...current, serviceAccountJson: value }))}
-                placeholder='{"client_email":"...","private_key":"..."}'
+                value={draft.serviceAccountPrivateKey}
+                onChange={(value) => setDraft((current) => ({ ...current, serviceAccountPrivateKey: value }))}
+                placeholder={"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"}
                 rows={12}
+              />
+            </Field>
+          </div>
+          <div className="md:col-span-2">
+            <Field label="Token URI" hint="Optional. Leave blank to use Google's default token endpoint.">
+              <Input
+                value={draft.serviceAccountTokenUri}
+                onChange={(value) => setDraft((current) => ({ ...current, serviceAccountTokenUri: value }))}
+                placeholder="https://oauth2.googleapis.com/token"
               />
             </Field>
           </div>

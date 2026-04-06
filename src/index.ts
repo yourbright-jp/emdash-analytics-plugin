@@ -13,6 +13,7 @@ import {
   PLUGIN_VERSION,
   PUBLIC_AGENT_ROUTES
 } from "./constants.js";
+import { resolveConfigInput } from "./config-validation.js";
 import { getConfigSummary, loadConfig, saveConfig } from "./config.js";
 import {
   authenticateAgentRequest,
@@ -30,10 +31,10 @@ import {
 } from "./sync.js";
 
 const configSaveSchema = z.object({
-  siteOrigin: z.string().url(),
-  ga4PropertyId: z.string().min(1),
-  gscSiteUrl: z.string().min(1),
-  serviceAccountJson: z.string().default("")
+  siteOrigin: z.string().optional(),
+  ga4PropertyId: z.string().optional(),
+  gscSiteUrl: z.string().optional(),
+  serviceAccountJson: z.string().optional()
 });
 
 const pageListSchema = z.object({
@@ -169,38 +170,23 @@ export function createPlugin() {
         handler: async (ctx) => {
           const input = ctx.input as ConfigSaveInput;
           const current = await loadConfig(ctx);
-          const merged =
-            input.serviceAccountJson.trim().length > 0
-              ? input
-              : current
-                ? {
-                    ...current,
-                    siteOrigin: input.siteOrigin,
-                    ga4PropertyId: input.ga4PropertyId,
-                    gscSiteUrl: input.gscSiteUrl
-                  }
-                : null;
-          if (!merged) {
-            throw new PluginRouteError("BAD_REQUEST", "serviceAccountJson is required for initial setup", 400);
+          const resolved = resolveConfigInput(input, current);
+          if (!resolved.success) {
+            throw new PluginRouteError("BAD_REQUEST", resolved.message, 400);
           }
-          return saveConfig(ctx, merged);
+          return saveConfig(ctx, resolved.data);
         }
       },
       [ADMIN_ROUTES.CONNECTION_TEST]: {
-        input: configSaveSchema.partial(),
+        input: configSaveSchema,
         handler: async (ctx) => {
           const input = ctx.input as Partial<ConfigSaveInput>;
           const current = await loadConfig(ctx);
-          const draft =
-            input.siteOrigin && input.ga4PropertyId && input.gscSiteUrl && input.serviceAccountJson
-              ? {
-                  siteOrigin: input.siteOrigin,
-                  ga4PropertyId: input.ga4PropertyId,
-                  gscSiteUrl: input.gscSiteUrl,
-                  serviceAccountJson: input.serviceAccountJson
-                }
-              : current;
-          return testConnection(ctx, draft);
+          const resolved = resolveConfigInput(input, current);
+          if (!resolved.success) {
+            throw new PluginRouteError("BAD_REQUEST", resolved.message, 400);
+          }
+          return testConnection(ctx, resolved.data);
         }
       },
       [ADMIN_ROUTES.SYNC_NOW]: {
