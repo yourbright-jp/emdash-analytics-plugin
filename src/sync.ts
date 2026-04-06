@@ -596,25 +596,23 @@ async function findContentPage(
 ): Promise<PageAggregateRecord | null> {
   if (id) {
     const byId = await ctx.storage.pages.query({
-      where: {
-        contentCollection: collection,
-        contentId: id
-      },
-      limit: 1
+      where: { contentId: id },
+      limit: 20
     });
-    const match = byId.items[0]?.data as PageAggregateRecord | undefined;
+    const match = byId.items
+      .map((item) => item.data as PageAggregateRecord)
+      .find((page) => page.contentCollection === collection);
     if (match) return match;
   }
 
   if (slug) {
     const bySlug = await ctx.storage.pages.query({
-      where: {
-        contentCollection: collection,
-        contentSlug: slug
-      },
-      limit: 1
+      where: { contentSlug: slug },
+      limit: 20
     });
-    const match = bySlug.items[0]?.data as PageAggregateRecord | undefined;
+    const match = bySlug.items
+      .map((item) => item.data as PageAggregateRecord)
+      .find((page) => page.contentCollection === collection);
     if (match) return match;
   }
 
