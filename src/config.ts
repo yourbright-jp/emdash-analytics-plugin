@@ -1,6 +1,5 @@
 import { decrypt, encrypt } from "@emdash-cms/auth";
 import type { PluginContext } from "emdash";
-import { z } from "astro/zod";
 
 import {
   CONFIG_GA4_PROPERTY_ID_KEY,
@@ -8,14 +7,8 @@ import {
   CONFIG_SERVICE_ACCOUNT_KEY,
   CONFIG_SITE_ORIGIN_KEY
 } from "./constants.js";
-import type { GoogleServiceAccount, PluginConfigSummary, SavedPluginConfig } from "./types.js";
-
-const configSchema = z.object({
-  siteOrigin: z.string().url(),
-  ga4PropertyId: z.string().regex(/^[0-9]+$/, "GA4 property ID must be numeric"),
-  gscSiteUrl: z.string().min(1),
-  serviceAccountJson: z.string().min(1)
-});
+import { normalizeOrigin, parseServiceAccount, resolveConfigInput } from "./config-validation.js";
+import type { PluginConfigSummary, SavedPluginConfig } from "./types.js";
 
 type PluginCtx = PluginContext;
 
@@ -33,16 +26,24 @@ export async function loadConfig(ctx: PluginCtx): Promise<SavedPluginConfig | nu
 
   const authSecret = getAuthSecret();
   const serviceAccountJson = await decrypt(serviceAccountCiphertext, authSecret);
-  return configSchema.parse({
+  const resolved = resolveConfigInput({
     siteOrigin,
     ga4PropertyId,
     gscSiteUrl,
     serviceAccountJson
   });
+  if (!resolved.success) {
+    throw new Error(resolved.message);
+  }
+  return resolved.data;
 }
 
 export async function saveConfig(ctx: PluginCtx, input: SavedPluginConfig): Promise<PluginConfigSummary> {
-  const parsed = configSchema.parse(input);
+  const resolved = resolveConfigInput(input);
+  if (!resolved.success) {
+    throw new Error(resolved.message);
+  }
+  const parsed = resolved.data;
   const authSecret = getAuthSecret();
   const serviceAccountCiphertext = await encrypt(parsed.serviceAccountJson, authSecret);
 
@@ -67,23 +68,6 @@ export async function getConfigSummary(ctx: PluginCtx): Promise<PluginConfigSumm
     };
   }
   return summarizeConfig(config);
-}
-
-export function parseServiceAccount(json: string): GoogleServiceAccount {
-  const schema = z.object({
-    client_email: z.string().email(),
-    private_key: z.string().min(1),
-    token_uri: z.string().url().optional()
-  });
-  return schema.parse(JSON.parse(json));
-}
-
-export function normalizeOrigin(origin: string): string {
-  const url = new URL(origin);
-  url.pathname = "/";
-  url.search = "";
-  url.hash = "";
-  return url.origin;
 }
 
 export function getAuthSecret(): string {

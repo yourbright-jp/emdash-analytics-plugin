@@ -21,7 +21,8 @@ import {
   pageQueryStorageId,
   pageStorageId
 } from "./content.js";
-import { loadConfig, parseServiceAccount } from "./config.js";
+import { parseServiceAccount } from "./config-validation.js";
+import { loadConfig } from "./config.js";
 import {
   buildWindows,
   fetchGaDailyTrend,
