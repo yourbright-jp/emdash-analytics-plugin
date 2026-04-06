@@ -275,7 +275,11 @@ function AnalyticsTabs({
     <div
       role="tablist"
       aria-label="Analytics sections"
-      className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-border bg-accent/60 p-1 shadow-sm"
+      className="inline-flex flex-wrap items-center gap-1 rounded-xl border p-1 shadow-sm"
+      style={{
+        backgroundColor: "#ffffff",
+        borderColor: "#cbd5e1"
+      }}
     >
       {tabs.map((tab) => {
         const active = tab.key === section;
@@ -286,10 +290,21 @@ function AnalyticsTabs({
             role="tab"
             aria-selected={active}
             onClick={() => onChange(tab.key)}
-            className={`min-h-10 rounded-lg px-4 py-2 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-foreground/20 ${
+            style={
               active
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-background/80 hover:text-foreground"
+                ? {
+                    backgroundColor: "var(--color-kumo-brand)",
+                    borderColor: "var(--color-kumo-brand)",
+                    color: "#ffffff"
+                  }
+                : {
+                    backgroundColor: "#ffffff",
+                    borderColor: "transparent",
+                    color: "#475569"
+                  }
+            }
+            className={`min-h-10 rounded-lg border px-4 py-2 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-foreground/20 ${
+              active ? "shadow-sm" : "hover:text-slate-900"
             }`}
           >
             {tab.label}
