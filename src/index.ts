@@ -69,8 +69,8 @@ export function contentInsightsPlugin(): PluginDescriptor {
   return {
     id: PLUGIN_ID,
     version: PLUGIN_VERSION,
-    entrypoint: "@yourbright-jp/emdash-analytics-plugin",
-    adminEntry: "@yourbright-jp/emdash-analytics-plugin/admin",
+    entrypoint: "@yourbright/emdash-analytics-plugin",
+    adminEntry: "@yourbright/emdash-analytics-plugin/admin",
     capabilities: ["network:fetch", "read:content"],
     allowedHosts: [
       "oauth2.googleapis.com",
@@ -186,14 +186,26 @@ export function createPlugin() {
           if (!resolved.success) {
             throw new PluginRouteError("BAD_REQUEST", resolved.message, 400);
           }
-          return testConnection(ctx, resolved.data);
+          try {
+            return testConnection(ctx, resolved.data);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Connection test failed";
+            console.error("[analytics-plugin] connection test failed", error);
+            throw new PluginRouteError("INTERNAL_ERROR", message, 500);
+          }
         }
       },
       [ADMIN_ROUTES.SYNC_NOW]: {
         handler: async (ctx) => {
-          const base = await syncBase(ctx, "manual");
-          const enriched = await enrichManagedQueries(ctx);
-          return { ...base, ...enriched };
+          try {
+            const base = await syncBase(ctx, "manual");
+            const enriched = await enrichManagedQueries(ctx);
+            return { ...base, ...enriched };
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Manual sync failed";
+            console.error("[analytics-plugin] manual sync failed", error);
+            throw new PluginRouteError("INTERNAL_ERROR", message, 500);
+          }
         }
       },
       [ADMIN_ROUTES.AGENT_KEYS_LIST]: {

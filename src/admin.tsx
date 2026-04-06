@@ -5,7 +5,11 @@ import * as React from "react";
 import { ADMIN_ROUTES, PLUGIN_ID } from "./constants.js";
 import type {
   AgentKeyRecord,
+  BreakdownRow,
   FreshnessState,
+  KpiDelta,
+  MoverRow,
+  OverviewData,
   PageAggregateRecord,
   PageKind,
   PageListResponse,
@@ -21,12 +25,7 @@ interface StatusResponse {
   freshness: FreshnessState;
 }
 
-interface OverviewResponse {
-  summary: SiteSummary | null;
-  freshness: FreshnessState;
-  topOpportunities: PageAggregateRecord[];
-  topUnmanaged: PageAggregateRecord[];
-}
+type OverviewResponse = OverviewData;
 
 interface AgentKeyListItem extends Omit<AgentKeyRecord, "hash"> {}
 
@@ -411,6 +410,206 @@ function MetricTable({
   );
 }
 
+function KpiDeltaCard({ metric }: { metric: KpiDelta }) {
+  return (
+    <StatCard
+      label={metric.label}
+      value={formatInteger(metric.current)}
+      note={`vs prev ${formatSignedInteger(metric.delta)} (${formatInteger(metric.previous)})`}
+    />
+  );
+}
+
+function TrendPanel({
+  title,
+  subtitle,
+  metrics,
+  trend
+}: {
+  title: string;
+  subtitle: string;
+  metrics: KpiDelta[];
+  trend: SiteSummary["trend"];
+}) {
+  return (
+    <Section title={title} subtitle={subtitle}>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {metrics.map((metric) => (
+          <TrendMetricCard key={metric.key} metric={metric} trend={trend} />
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+function TrendMetricCard({
+  metric,
+  trend
+}: {
+  metric: KpiDelta;
+  trend: SiteSummary["trend"];
+}) {
+  const data = trend.map((row) => ({
+    date: row.date,
+    value:
+      metric.key === "gscClicks"
+        ? row.gscClicks
+        : metric.key === "gscImpressions"
+          ? row.gscImpressions
+          : metric.key === "gaViews"
+            ? row.gaViews
+            : metric.key === "gaUsers"
+              ? row.gaUsers
+              : row.gaSessions
+  }));
+
+  return (
+    <div className="rounded-xl border border-border bg-background p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-medium">{metric.label}</div>
+          <div className="mt-1 text-2xl font-semibold">{formatInteger(metric.current)}</div>
+        </div>
+        <div className={`text-sm font-medium ${metric.delta >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+          {formatSignedInteger(metric.delta)}
+        </div>
+      </div>
+      <div className="mt-3">
+        <Sparkline data={data} />
+      </div>
+      <div className="mt-2 text-xs text-muted-foreground">
+        Previous 28d: {formatInteger(metric.previous)}
+      </div>
+    </div>
+  );
+}
+
+function Sparkline({
+  data
+}: {
+  data: Array<{ date: string; value: number }>;
+}) {
+  if (data.length === 0) {
+    return <div className="h-28 rounded-lg border border-dashed border-border bg-card" />;
+  }
+
+  const width = 320;
+  const height = 112;
+  const padding = 10;
+  const values = data.map((item) => item.value);
+  const max = Math.max(...values, 1);
+  const min = Math.min(...values, 0);
+  const range = Math.max(max - min, 1);
+  const points = data.map((item, index) => {
+    const x = padding + (index / Math.max(data.length - 1, 1)) * (width - padding * 2);
+    const y = height - padding - ((item.value - min) / range) * (height - padding * 2);
+    return `${x},${y}`;
+  });
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-28 w-full overflow-visible">
+      <path
+        d={`M ${points.join(" L ")}`}
+        fill="none"
+        stroke="var(--color-kumo-brand)"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function BreakdownTable({
+  rows,
+  emptyMessage
+}: {
+  rows: BreakdownRow[];
+  emptyMessage: string;
+}) {
+  if (rows.length === 0) {
+    return <div className="text-sm text-muted-foreground">{emptyMessage}</div>;
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-sm">
+        <thead className="text-left text-xs uppercase tracking-[0.16em] text-muted-foreground">
+          <tr>
+            <th className="pb-3 pr-4">Group</th>
+            <th className="pb-3 pr-4">Pages</th>
+            <th className="pb-3 pr-4">GSC Clicks</th>
+            <th className="pb-3 pr-4">GA Views</th>
+            <th className="pb-3 pr-4">GA Sessions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.key} className="border-t border-border/80">
+              <td className="py-3 pr-4 font-medium">{row.label}</td>
+              <td className="py-3 pr-4">{formatInteger(row.trackedPages)}</td>
+              <td className="py-3 pr-4">
+                {formatInteger(row.current.gscClicks)}
+                <div className="text-xs text-muted-foreground">{formatSignedInteger(row.delta.gscClicks)}</div>
+              </td>
+              <td className="py-3 pr-4">
+                {formatInteger(row.current.gaViews)}
+                <div className="text-xs text-muted-foreground">{formatSignedInteger(row.delta.gaViews)}</div>
+              </td>
+              <td className="py-3 pr-4">
+                {formatInteger(row.current.gaSessions)}
+                <div className="text-xs text-muted-foreground">{formatSignedInteger(row.delta.gaSessions)}</div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function MoversTable({
+  items,
+  emptyMessage
+}: {
+  items: MoverRow[];
+  emptyMessage: string;
+}) {
+  if (items.length === 0) {
+    return <div className="text-sm text-muted-foreground">{emptyMessage}</div>;
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-sm">
+        <thead className="text-left text-xs uppercase tracking-[0.16em] text-muted-foreground">
+          <tr>
+            <th className="pb-3 pr-4">Page</th>
+            <th className="pb-3 pr-4">Type</th>
+            <th className="pb-3 pr-4">GA Views Δ</th>
+            <th className="pb-3 pr-4">GSC Clicks Δ</th>
+            <th className="pb-3 pr-4">Current Views</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            <tr key={item.urlPath} className="border-t border-border/80">
+              <td className="py-3 pr-4">
+                <div className="font-medium">{item.title}</div>
+                <div className="text-xs text-muted-foreground">{item.urlPath}</div>
+              </td>
+              <td className="py-3 pr-4">{pageKindLabel(item.pageKind)}</td>
+              <td className="py-3 pr-4">{formatSignedInteger(item.gaViewsDelta)}</td>
+              <td className="py-3 pr-4">{formatSignedInteger(item.gscClicksDelta)}</td>
+              <td className="py-3 pr-4">{formatInteger(item.gaViews28d)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function OverviewPage() {
   const [status, setStatus] = React.useState<StatusResponse | null>(null);
   const [overview, setOverview] = React.useState<OverviewResponse | null>(null);
@@ -448,7 +647,7 @@ function OverviewPage() {
   return (
     <Shell
       title="Content Insights"
-      description="Prioritize pages with the clearest opportunities using combined Search Console and GA4 data."
+      description="Monitor site health, compare the last 28 days to the previous window, and spot pages that changed fastest."
       actions={<Button variant="secondary" onClick={() => void load()} disabled={loading}>Reload</Button>}
     >
       <ErrorBanner message={error} />
@@ -467,22 +666,47 @@ function OverviewPage() {
           <StatCard label="Service Account" value={status?.config?.serviceAccountEmail || "-"} />
         </div>
       </Section>
-      <Section title="KPI Snapshot" subtitle="Aggregated totals for the last 28 days across public pages.">
-        <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
-          <StatCard label="GSC Clicks" value={formatInteger(summary?.totals.gscClicks28d ?? 0)} />
-          <StatCard label="GSC Impressions" value={formatInteger(summary?.totals.gscImpressions28d ?? 0)} />
-          <StatCard label="GA Views" value={formatInteger(summary?.totals.gaViews28d ?? 0)} />
-          <StatCard label="GA Users" value={formatInteger(summary?.totals.gaUsers28d ?? 0)} />
-          <StatCard label="GA Sessions" value={formatInteger(summary?.totals.gaSessions28d ?? 0)} />
-          <StatCard label="Managed Opportunities" value={formatInteger(summary?.totals.managedOpportunities ?? 0)} />
+      <Section title="KPI Snapshot" subtitle="Current 28 days versus the previous 28 days across all tracked public pages.">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          {(overview?.kpiDeltas ?? []).map((metric) => (
+            <KpiDeltaCard key={metric.key} metric={metric} />
+          ))}
         </div>
       </Section>
+      {summary ? (
+        <div className="grid gap-6 xl:grid-cols-2">
+          <TrendPanel
+            title="Search Trend"
+            subtitle="Daily search demand and click capture for the current 28-day window."
+            metrics={(overview?.kpiDeltas ?? []).filter(
+              (metric) => metric.key === "gscClicks" || metric.key === "gscImpressions"
+            )}
+            trend={summary.trend}
+          />
+          <TrendPanel
+            title="Traffic Trend"
+            subtitle="Daily traffic movement from GA4 for the current 28-day window."
+            metrics={(overview?.kpiDeltas ?? []).filter(
+              (metric) => metric.key === "gaViews" || metric.key === "gaSessions"
+            )}
+            trend={summary.trend}
+          />
+        </div>
+      ) : null}
       <div className="grid gap-6 xl:grid-cols-2">
-        <Section title="Top Opportunities" subtitle="Managed content only.">
-          <MetricTable items={overview?.topOpportunities ?? []} emptyMessage="No opportunities yet." />
+        <Section title="Page Mix" subtitle="Compare page groups by current volume and change from the previous window.">
+          <BreakdownTable rows={overview?.pageKindBreakdown ?? []} emptyMessage="No tracked pages yet." />
         </Section>
-        <Section title="Top Unmanaged Pages" subtitle="Public pages outside EmDash-managed content.">
-          <MetricTable items={overview?.topUnmanaged ?? []} emptyMessage="No unmanaged page data yet." />
+        <Section title="Managed Coverage" subtitle="See whether growth is coming from EmDash-managed content or unmanaged pages.">
+          <BreakdownTable rows={overview?.managedBreakdown ?? []} emptyMessage="No tracked pages yet." />
+        </Section>
+      </div>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Section title="Top Gainers" subtitle="Pages with the strongest positive movement in the last 28 days.">
+          <MoversTable items={overview?.topGainers ?? []} emptyMessage="No gaining pages yet." />
+        </Section>
+        <Section title="Top Decliners" subtitle="Pages with the sharpest drop and the clearest candidates for investigation.">
+          <MoversTable items={overview?.topDecliners ?? []} emptyMessage="No declining pages yet." />
         </Section>
       </div>
       <Section title="Reporting Windows" subtitle="The agent API returns the same windows.">
@@ -889,7 +1113,7 @@ function SettingsPage() {
           </Button>
         </div>
       </Section>
-      <Section title="Agent API Keys" subtitle="Use these as Bearer yb_ins_... tokens. Raw keys are shown only once.">
+      <Section title="Agent API Keys" subtitle="Use these with Authorization: AgentKey yb_ins_... or X-Emdash-Agent-Key. Raw keys are shown only once.">
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
           <Field label="New key label">
             <Input value={newKeyLabel} onChange={setNewKeyLabel} placeholder="content-feedback-agent" />
@@ -1061,6 +1285,12 @@ function WindowCard({
 
 function formatInteger(value: number | null | undefined): string {
   return new Intl.NumberFormat("ja-JP").format(value ?? 0);
+}
+
+function formatSignedInteger(value: number | null | undefined): string {
+  const numeric = value ?? 0;
+  if (numeric === 0) return "0";
+  return `${numeric > 0 ? "+" : ""}${formatInteger(numeric)}`;
 }
 
 function formatPercent(value: number | null | undefined): string {

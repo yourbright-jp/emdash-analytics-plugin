@@ -35,10 +35,14 @@ import {
 import { scorePage } from "./scoring.js";
 import type {
   AgentKeyRecord,
+  BreakdownRow,
   ContentContextResponse,
   DailyMetricRecord,
   FreshnessState,
+  KpiDelta,
   ManagedContentRef,
+  MoverRow,
+  OverviewData,
   PageAggregateRecord,
   PageListFilters,
   PageListResponse,
@@ -357,13 +361,8 @@ export async function listPages(ctx: PluginCtx, filters: PageListFilters): Promi
   };
 }
 
-export async function getOverview(ctx: PluginCtx): Promise<{
-  summary: SiteSummary | null;
-  freshness: FreshnessState;
-  topOpportunities: PageAggregateRecord[];
-  topUnmanaged: PageAggregateRecord[];
-}> {
-  const [summary, freshness, topOpportunities, topUnmanaged] = await Promise.all([
+export async function getOverview(ctx: PluginCtx): Promise<OverviewData> {
+  const [summary, freshness, topOpportunities, topUnmanaged, allPages] = await Promise.all([
     ctx.kv.get<SiteSummary>(SITE_SUMMARY_KEY),
     getFreshness(ctx),
     ctx.storage.pages.query({
@@ -375,14 +374,44 @@ export async function getOverview(ctx: PluginCtx): Promise<{
       where: { managed: false },
       orderBy: { gaViews28d: "desc" },
       limit: 5
-    })
+    }),
+    listAllPages(ctx)
   ]);
 
+  return buildOverviewData(
+    summary,
+    freshness,
+    allPages,
+    topOpportunities.items.map((item) => item.data as PageAggregateRecord),
+    topUnmanaged.items.map((item) => item.data as PageAggregateRecord)
+  );
+}
+
+export function buildOverviewData(
+  summary: SiteSummary | null,
+  freshness: FreshnessState,
+  allPages: PageAggregateRecord[],
+  topOpportunities: PageAggregateRecord[],
+  topUnmanaged: PageAggregateRecord[]
+): OverviewData {
   return {
     summary,
     freshness,
-    topOpportunities: topOpportunities.items.map((item) => item.data as PageAggregateRecord),
-    topUnmanaged: topUnmanaged.items.map((item) => item.data as PageAggregateRecord)
+    kpiDeltas: buildKpiDeltas(allPages),
+    pageKindBreakdown: buildBreakdown(
+      allPages,
+      (page) => page.pageKind,
+      (key) => pageKindLabel(key as PageAggregateRecord["pageKind"])
+    ),
+    managedBreakdown: buildBreakdown(
+      allPages,
+      (page) => (page.managed ? "managed" : "unmanaged"),
+      (key) => (key === "managed" ? "Managed" : "Unmanaged")
+    ),
+    topGainers: buildMovers(allPages, "gainers"),
+    topDecliners: buildMovers(allPages, "decliners"),
+    topOpportunities,
+    topUnmanaged
   };
 }
 
@@ -513,8 +542,7 @@ export async function revokeAgentKey(ctx: PluginCtx, prefix: string): Promise<vo
 }
 
 export async function authenticateAgentRequest(ctx: PluginCtx, request: Request): Promise<void> {
-  const authHeader = request.headers.get("Authorization") || "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+  const token = extractAgentToken(request);
   if (!token.startsWith(AGENT_KEY_PREFIX)) {
     throw new PluginRouteError("UNAUTHORIZED", "Missing or invalid agent key", 401);
   }
@@ -528,6 +556,20 @@ export async function authenticateAgentRequest(ctx: PluginCtx, request: Request)
 
   keyRecord.lastUsedAt = new Date().toISOString();
   await ctx.storage.agent_keys.put(hash, keyRecord);
+}
+
+export function extractAgentToken(request: Request): string {
+  const authHeader = request.headers.get("Authorization") || "";
+  if (authHeader.startsWith("AgentKey ")) {
+    return authHeader.slice("AgentKey ".length).trim();
+  }
+
+  const headerToken = request.headers.get("X-Emdash-Agent-Key") || "";
+  if (headerToken.trim()) {
+    return headerToken.trim();
+  }
+
+  return "";
 }
 
 export async function handleCron(ctx: PluginCtx, eventName: string): Promise<void> {
@@ -627,6 +669,20 @@ async function getFreshness(ctx: PluginCtx): Promise<FreshnessState> {
       lastStatus: "idle"
     }
   );
+}
+
+async function listAllPages(ctx: PluginCtx): Promise<PageAggregateRecord[]> {
+  const pages: PageAggregateRecord[] = [];
+  let cursor: string | undefined;
+  do {
+    const batch = await ctx.storage.pages.query({
+      limit: 500,
+      cursor
+    });
+    cursor = batch.cursor;
+    pages.push(...batch.items.map((item) => item.data as PageAggregateRecord));
+  } while (cursor);
+  return pages;
 }
 
 async function refreshSummaryFromStorage(ctx: PluginCtx): Promise<void> {
@@ -733,4 +789,143 @@ function mergeTrend(
     map.set(row.date, existing);
   }
   return Array.from(map.values()).sort((left, right) => left.date.localeCompare(right.date));
+}
+
+function buildKpiDeltas(pages: PageAggregateRecord[]): KpiDelta[] {
+  const metrics: Array<Omit<KpiDelta, "delta">> = [
+    {
+      key: "gscClicks",
+      label: "GSC Clicks",
+      current: sumPages(pages, (page) => page.gscClicks28d),
+      previous: sumPages(pages, (page) => page.gscClicksPrev28d)
+    },
+    {
+      key: "gscImpressions",
+      label: "GSC Impressions",
+      current: sumPages(pages, (page) => page.gscImpressions28d),
+      previous: sumPages(pages, (page) => page.gscImpressionsPrev28d)
+    },
+    {
+      key: "gaViews",
+      label: "GA Views",
+      current: sumPages(pages, (page) => page.gaViews28d),
+      previous: sumPages(pages, (page) => page.gaViewsPrev28d)
+    },
+    {
+      key: "gaUsers",
+      label: "GA Users",
+      current: sumPages(pages, (page) => page.gaUsers28d),
+      previous: sumPages(pages, (page) => page.gaUsersPrev28d)
+    },
+    {
+      key: "gaSessions",
+      label: "GA Sessions",
+      current: sumPages(pages, (page) => page.gaSessions28d),
+      previous: sumPages(pages, (page) => page.gaSessionsPrev28d)
+    }
+  ];
+
+  return metrics.map((metric) => ({
+    ...metric,
+    delta: metric.current - metric.previous
+  }));
+}
+
+function buildBreakdown(
+  pages: PageAggregateRecord[],
+  getKey: (page: PageAggregateRecord) => string,
+  getLabel: (key: string) => string
+): BreakdownRow[] {
+  const buckets = new Map<string, BreakdownRow>();
+
+  for (const page of pages) {
+    const key = getKey(page);
+    const existing = buckets.get(key) ?? {
+      key,
+      label: getLabel(key),
+      trackedPages: 0,
+      current: { gscClicks: 0, gaViews: 0, gaSessions: 0 },
+      previous: { gscClicks: 0, gaViews: 0, gaSessions: 0 },
+      delta: { gscClicks: 0, gaViews: 0, gaSessions: 0 }
+    };
+
+    existing.trackedPages += 1;
+    existing.current.gscClicks += page.gscClicks28d;
+    existing.current.gaViews += page.gaViews28d;
+    existing.current.gaSessions += page.gaSessions28d;
+    existing.previous.gscClicks += page.gscClicksPrev28d;
+    existing.previous.gaViews += page.gaViewsPrev28d;
+    existing.previous.gaSessions += page.gaSessionsPrev28d;
+    existing.delta.gscClicks = existing.current.gscClicks - existing.previous.gscClicks;
+    existing.delta.gaViews = existing.current.gaViews - existing.previous.gaViews;
+    existing.delta.gaSessions = existing.current.gaSessions - existing.previous.gaSessions;
+    buckets.set(key, existing);
+  }
+
+  return Array.from(buckets.values()).sort((left, right) => right.current.gaViews - left.current.gaViews);
+}
+
+function buildMovers(
+  pages: PageAggregateRecord[],
+  direction: "gainers" | "decliners"
+): MoverRow[] {
+  const rows = pages.map((page) => ({
+    urlPath: page.urlPath,
+    title: page.title,
+    pageKind: page.pageKind,
+    managed: page.managed,
+    gscClicks28d: page.gscClicks28d,
+    gaViews28d: page.gaViews28d,
+    gscClicksDelta: page.gscClicks28d - page.gscClicksPrev28d,
+    gaViewsDelta: page.gaViews28d - page.gaViewsPrev28d,
+    opportunityScore: page.opportunityScore
+  }));
+
+  const filtered = rows.filter((row) =>
+    direction === "gainers"
+      ? row.gaViewsDelta > 0 || row.gscClicksDelta > 0
+      : row.gaViewsDelta < 0 || row.gscClicksDelta < 0
+  );
+
+  filtered.sort((left, right) => {
+    if (direction === "gainers") {
+      return (
+        right.gaViewsDelta - left.gaViewsDelta ||
+        right.gscClicksDelta - left.gscClicksDelta ||
+        right.gaViews28d - left.gaViews28d
+      );
+    }
+
+    return (
+      left.gaViewsDelta - right.gaViewsDelta ||
+      left.gscClicksDelta - right.gscClicksDelta ||
+      right.gaViews28d - left.gaViews28d
+    );
+  });
+
+  return filtered.slice(0, 5);
+}
+
+function sumPages(
+  pages: PageAggregateRecord[],
+  getValue: (page: PageAggregateRecord) => number
+): number {
+  return pages.reduce((total, page) => total + getValue(page), 0);
+}
+
+function pageKindLabel(pageKind: PageAggregateRecord["pageKind"]): string {
+  switch (pageKind) {
+    case "blog_post":
+      return "Blog Post";
+    case "blog_archive":
+      return "Blog Archive";
+    case "tag":
+      return "Tag";
+    case "author":
+      return "Author";
+    case "landing":
+      return "Landing";
+    default:
+      return "Other";
+  }
 }

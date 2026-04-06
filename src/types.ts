@@ -178,6 +178,47 @@ export interface ContentContextResponse {
   };
 }
 
+export interface KpiDelta {
+  key: "gscClicks" | "gscImpressions" | "gaViews" | "gaUsers" | "gaSessions";
+  label: string;
+  current: number;
+  previous: number;
+  delta: number;
+}
+
+export interface BreakdownRow {
+  key: string;
+  label: string;
+  trackedPages: number;
+  current: {
+    gscClicks: number;
+    gaViews: number;
+    gaSessions: number;
+  };
+  previous: {
+    gscClicks: number;
+    gaViews: number;
+    gaSessions: number;
+  };
+  delta: {
+    gscClicks: number;
+    gaViews: number;
+    gaSessions: number;
+  };
+}
+
+export interface MoverRow {
+  urlPath: string;
+  title: string;
+  pageKind: PageKind;
+  managed: boolean;
+  gscClicks28d: number;
+  gaViews28d: number;
+  gscClicksDelta: number;
+  gaViewsDelta: number;
+  opportunityScore: number;
+}
+
 export interface PageListFilters {
   managed?: "all" | "managed" | "unmanaged";
   hasOpportunity?: boolean;
@@ -190,4 +231,16 @@ export interface PageListResponse {
   items: Array<PageAggregateRecord>;
   cursor?: string;
   hasMore: boolean;
+}
+
+export interface OverviewData {
+  summary: SiteSummary | null;
+  freshness: FreshnessState;
+  kpiDeltas: KpiDelta[];
+  pageKindBreakdown: BreakdownRow[];
+  managedBreakdown: BreakdownRow[];
+  topGainers: MoverRow[];
+  topDecliners: MoverRow[];
+  topOpportunities: PageAggregateRecord[];
+  topUnmanaged: PageAggregateRecord[];
 }

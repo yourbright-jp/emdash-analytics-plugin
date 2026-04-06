@@ -1,15 +1,15 @@
 {
-  "name": "@yourbright-jp/emdash-analytics-plugin",
-  "version": "0.1.0",
+  "name": "@yourbright/emdash-analytics-plugin",
+  "version": "0.1.3",
   "description": "Google Search Console and GA4 analytics plugin for EmDash",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "./dist/index.js",
   "exports": {
-    ".": "./src/index.ts",
-    "./admin": "./src/admin.tsx"
+    ".": "./dist/index.js",
+    "./admin": "./dist/admin.js"
   },
   "files": [
-    "src",
+    "dist",
     "README.md"
   ],
   "keywords": [
@@ -23,6 +23,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/yourbright-jp/emdash-analytics-plugin.git"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "peerDependencies": {
     "@cloudflare/kumo": "^1.0.0",
@@ -44,10 +47,13 @@
     "emdash": "^0.1.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "tsup": "^8.5.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   },
   "scripts": {
+    "build": "tsup",
+    "prepublishOnly": "npm run build && npm test && npm run typecheck",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   }
