@@ -200,6 +200,26 @@ function Section({
   );
 }
 
+function InlineHeader({
+  title,
+  description,
+  actions
+}: {
+  title: string;
+  description?: string;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-3 border-b border-border pb-4 md:flex-row md:items-end md:justify-between">
+      <div className="space-y-1">
+        <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+        {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
+      </div>
+      {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+    </div>
+  );
+}
+
 function StatCard({
   label,
   value,
@@ -214,6 +234,62 @@ function StatCard({
       <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
       <div className="mt-2 text-2xl font-semibold">{value}</div>
       {note ? <div className="mt-1 text-xs text-muted-foreground">{note}</div> : null}
+    </div>
+  );
+}
+
+type AnalyticsSection = "dashboard" | "pages" | "settings";
+
+function sectionFromLocation(): AnalyticsSection {
+  if (typeof window === "undefined") return "dashboard";
+  const url = new URL(window.location.href);
+  const section = url.searchParams.get("section");
+  return section === "pages" || section === "settings" ? section : "dashboard";
+}
+
+function updateSectionInUrl(section: AnalyticsSection) {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (section === "dashboard") {
+    url.searchParams.delete("section");
+  } else {
+    url.searchParams.set("section", section);
+  }
+  window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+function AnalyticsTabs({
+  section,
+  onChange
+}: {
+  section: AnalyticsSection;
+  onChange: (section: AnalyticsSection) => void;
+}) {
+  const tabs: Array<{ key: AnalyticsSection; label: string }> = [
+    { key: "dashboard", label: "Dashboard" },
+    { key: "pages", label: "Pages" },
+    { key: "settings", label: "Settings" }
+  ];
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {tabs.map((tab) => {
+        const active = tab.key === section;
+        return (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => onChange(tab.key)}
+            className={`rounded-full border px-3 py-2 text-sm font-medium transition ${
+              active
+                ? "border-foreground bg-foreground text-background"
+                : "border-border bg-background text-foreground hover:bg-accent"
+            }`}
+          >
+            {tab.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -610,7 +686,7 @@ function MoversTable({
   );
 }
 
-function OverviewPage() {
+function OverviewPage({ embedded = false }: { embedded?: boolean }) {
   const [status, setStatus] = React.useState<StatusResponse | null>(null);
   const [overview, setOverview] = React.useState<OverviewResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -644,12 +720,8 @@ function OverviewPage() {
   const summary = overview?.summary ?? status?.summary ?? null;
   const freshness = overview?.freshness ?? status?.freshness ?? idleFreshness();
 
-  return (
-    <Shell
-      title="Content Insights"
-      description="Monitor site health, compare the last 28 days to the previous window, and spot pages that changed fastest."
-      actions={<Button variant="secondary" onClick={() => void load()} disabled={loading}>Reload</Button>}
-    >
+  const content = (
+    <>
       <ErrorBanner message={error} />
       {!status?.config ? (
         <Section title="Not Configured" subtitle="Save your Google connection settings first.">
@@ -717,11 +789,34 @@ function OverviewPage() {
           <WindowCard label="GA Previous" value={summary?.window.gaPrevious} />
         </div>
       </Section>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="space-y-6">
+        <InlineHeader
+          title="Dashboard"
+          description="Monitor site health, compare the last 28 days to the previous window, and spot pages that changed fastest."
+          actions={<Button variant="secondary" onClick={() => void load()} disabled={loading}>Reload</Button>}
+        />
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <Shell
+      title="Content Insights"
+      description="Monitor site health, compare the last 28 days to the previous window, and spot pages that changed fastest."
+      actions={<Button variant="secondary" onClick={() => void load()} disabled={loading}>Reload</Button>}
+    >
+      {content}
     </Shell>
   );
 }
 
-function PagesPage() {
+function PagesPage({ embedded = false }: { embedded?: boolean }) {
   const [managed, setManaged] = React.useState<"all" | "managed" | "unmanaged">("all");
   const [pageKind, setPageKind] = React.useState<"all" | PageKind>("all");
   const [hasOpportunity, setHasOpportunity] = React.useState(false);
@@ -781,8 +876,8 @@ function PagesPage() {
     };
   }, [selected]);
 
-  return (
-    <Shell title="Pages" description="Explore all public pages and filter down to the content that needs attention.">
+  const content = (
+    <>
       <ErrorBanner message={error} />
       <Section title="Filters">
         <div className="grid gap-4 md:grid-cols-4">
@@ -897,11 +992,25 @@ function PagesPage() {
           )}
         </Section>
       </div>
-    </Shell>
+    </>
   );
+
+  if (embedded) {
+    return (
+      <div className="space-y-6">
+        <InlineHeader
+          title="Pages"
+          description="Explore all public pages and filter down to the content that needs attention."
+        />
+        {content}
+      </div>
+    );
+  }
+
+  return <Shell title="Pages" description="Explore all public pages and filter down to the content that needs attention.">{content}</Shell>;
 }
 
-function SettingsPage() {
+function SettingsPage({ embedded = false }: { embedded?: boolean }) {
   const [draft, setDraft] = React.useState<ConfigDraft>(EMPTY_CONFIG);
   const [storedConfig, setStoredConfig] = React.useState<StoredConfigFields>({
     siteOrigin: "",
@@ -1063,11 +1172,8 @@ function SettingsPage() {
     }
   };
 
-  return (
-    <Shell
-      title="Analytics"
-      description="Manage Google connection settings, manual sync, and agent API keys."
-    >
+  const content = (
+    <>
       <ErrorBanner message={error} />
       <SuccessBanner message={success} />
       <Section title="Google Connection">
@@ -1163,6 +1269,54 @@ function SettingsPage() {
           </table>
         </div>
       </Section>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="space-y-6">
+        <InlineHeader
+          title="Settings"
+          description="Manage Google connection settings, manual sync, and agent API keys."
+        />
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <Shell
+      title="Analytics"
+      description="Manage Google connection settings, manual sync, and agent API keys."
+    >
+      {content}
+    </Shell>
+  );
+}
+
+function AnalyticsPage() {
+  const [section, setSection] = React.useState<AnalyticsSection>(sectionFromLocation);
+
+  React.useEffect(() => {
+    const handlePopstate = () => setSection(sectionFromLocation());
+    window.addEventListener("popstate", handlePopstate);
+    return () => window.removeEventListener("popstate", handlePopstate);
+  }, []);
+
+  const selectSection = (nextSection: AnalyticsSection) => {
+    setSection(nextSection);
+    updateSectionInUrl(nextSection);
+  };
+
+  return (
+    <Shell
+      title="Analytics"
+      description="Use one workspace for dashboard review, page drilldown, and connection management."
+      actions={<AnalyticsTabs section={section} onChange={selectSection} />}
+    >
+      {section === "dashboard" ? <OverviewPage embedded /> : null}
+      {section === "pages" ? <PagesPage embedded /> : null}
+      {section === "settings" ? <SettingsPage embedded /> : null}
     </Shell>
   );
 }
@@ -1358,7 +1512,7 @@ function numberValue(value: unknown): number {
 }
 
 export const pages: PluginAdminExports["pages"] = {
-  "/": OverviewPage,
+  "/": AnalyticsPage,
   "/pages": PagesPage,
   "/settings": SettingsPage
 };

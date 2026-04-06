@@ -78,9 +78,7 @@ export function contentInsightsPlugin(): PluginDescriptor {
       "www.googleapis.com"
     ],
     adminPages: [
-      { path: "/", label: "Overview", icon: "chart-bar" },
-      { path: "/pages", label: "Pages", icon: "list" },
-      { path: "/settings", label: "Analytics", icon: "gear" }
+      { path: "/", label: "Analytics", icon: "chart-bar" }
     ],
     adminWidgets: [
       { id: "content-opportunities", title: "Content Opportunities", size: "full" }
@@ -262,9 +260,7 @@ export function createPlugin() {
     },
     admin: {
       pages: [
-        { path: "/", label: "Overview", icon: "chart-bar" },
-        { path: "/pages", label: "Pages", icon: "list" },
-        { path: "/settings", label: "Analytics", icon: "gear" }
+        { path: "/", label: "Analytics", icon: "chart-bar" }
       ],
       widgets: [
         { id: "content-opportunities", title: "Content Opportunities", size: "full" }
