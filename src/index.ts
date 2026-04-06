@@ -254,7 +254,21 @@ export function createPlugin() {
           if (!id && !slug) {
             throw new PluginRouteError("BAD_REQUEST", "id or slug is required", 400);
           }
-          return getContentContext(ctx, collection, id, slug);
+          try {
+            return getContentContext(ctx, collection, id, slug);
+          } catch (error) {
+            console.error("[analytics-plugin] content-context failed", {
+              collection,
+              id,
+              slug,
+              error: error instanceof Error ? {
+                name: error.name,
+                message: error.message,
+                stack: error.stack
+              } : String(error)
+            });
+            throw error;
+          }
         }
       }
     },

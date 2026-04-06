@@ -422,18 +422,19 @@ export async function getContentContext(
   slug?: string
 ): Promise<ContentContextResponse> {
   const config = await requireConfig(ctx);
-  const page = await findContentPage(ctx, collection, id, slug);
-  if (!page) {
-    throw new PluginRouteError("NOT_FOUND", "Analytics data not found for content", 404);
-  }
+  const freshness = await getFreshness(ctx);
+  const page =
+    (await findContentPage(ctx, collection, id, slug)) ||
+    createFallbackContentPage(config.siteOrigin, collection, id, slug, freshness);
 
   const contentRef =
     resolveStoredContentRef(page, collection, id, slug);
 
-  const queries = await getFreshQueriesForPage(ctx, config, contentRef.urlPath);
+  const queries = page.lastSyncedAt
+    ? await getFreshQueriesForPage(ctx, config, contentRef.urlPath)
+    : [];
   const windows = buildWindows();
   const score = scorePage(page, queries);
-  const freshness = await getFreshness(ctx);
 
   return {
     content: {
@@ -608,6 +609,53 @@ async function findContentPage(
   }
 
   return null;
+}
+
+function createFallbackContentPage(
+  siteOrigin: string,
+  collection: string,
+  id?: string,
+  slug?: string,
+  freshness?: FreshnessState
+): PageAggregateRecord {
+  const host = new URL(siteOrigin).hostname;
+  const resolvedSlug = slug || null;
+  const resolvedId = id || null;
+  const urlPath = collection === "posts"
+    ? `/blog/${resolvedSlug || resolvedId || "unknown"}/`
+    : "/";
+  const title = resolvedSlug || resolvedId || urlPath;
+
+  return {
+    urlPath,
+    host,
+    pageKind: classifyPageKind(urlPath),
+    managed: true,
+    title,
+    contentCollection: collection,
+    contentId: resolvedId,
+    contentSlug: resolvedSlug,
+    gscClicks28d: 0,
+    gscImpressions28d: 0,
+    gscCtr28d: 0,
+    gscPosition28d: 0,
+    gscClicksPrev28d: 0,
+    gscImpressionsPrev28d: 0,
+    gaViews28d: 0,
+    gaUsers28d: 0,
+    gaSessions28d: 0,
+    gaEngagementRate28d: 0,
+    gaBounceRate28d: 0,
+    gaAvgSessionDuration28d: 0,
+    gaViewsPrev28d: 0,
+    gaUsersPrev28d: 0,
+    gaSessionsPrev28d: 0,
+    opportunityScore: 0,
+    opportunityTags: [],
+    lastSyncedAt: "",
+    lastGscDate: freshness?.lastGscDate || null,
+    lastGaDate: freshness?.lastGaDate || null
+  };
 }
 
 function resolveStoredContentRef(
