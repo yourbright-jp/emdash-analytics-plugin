@@ -119,7 +119,8 @@ function resolveField(value: string | undefined, fallback: string | undefined): 
   if (value === undefined) {
     return fallback ?? "";
   }
-  return value.trim();
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : fallback ?? "";
 }
 
 function resolveServiceAccountField(value: string | undefined, fallback: string | undefined): string {

@@ -32,6 +32,26 @@ describe("resolveConfigInput", () => {
     expect(result.data.serviceAccountJson).toBe(existingConfig.serviceAccountJson);
   });
 
+  it("preserves stored non-secret fields when the draft leaves them blank", () => {
+    const result = resolveConfigInput(
+      {
+        siteOrigin: "",
+        ga4PropertyId: "",
+        gscSiteUrl: "",
+        serviceAccountJson: ""
+      },
+      existingConfig
+    );
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+
+    expect(result.data.siteOrigin).toBe(existingConfig.siteOrigin);
+    expect(result.data.ga4PropertyId).toBe(existingConfig.ga4PropertyId);
+    expect(result.data.gscSiteUrl).toBe(existingConfig.gscSiteUrl);
+    expect(result.data.serviceAccountJson).toBe(existingConfig.serviceAccountJson);
+  });
+
   it("requires service account credentials on the first save", () => {
     const result = resolveConfigInput({
       siteOrigin: "https://www.yourbright.co.jp",
