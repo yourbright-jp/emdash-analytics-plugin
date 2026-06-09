@@ -1,6 +1,6 @@
 {
   "name": "@yourbright/emdash-analytics-plugin",
-  "version": "0.1.10",
+  "version": "0.2.0",
   "description": "Google Search Console and GA4 analytics plugin for EmDash",
   "type": "module",
   "main": "./dist/index.js",
@@ -28,23 +28,23 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@cloudflare/kumo": "^1.0.0",
+    "@cloudflare/kumo": "^2.4.0",
     "@phosphor-icons/react": "^2.1.10",
     "astro": ">=6.0.0",
-    "emdash": "^0.17.2",
+    "emdash": "^0.15.0",
     "react": "^18.0.0 || ^19.0.0"
   },
   "dependencies": {
-    "@emdash-cms/auth": "^0.17.2",
+    "@emdash-cms/auth": "^0.15.0",
     "ulidx": "^2.4.1"
   },
   "devDependencies": {
-    "@cloudflare/kumo": "^1.0.0",
+    "@cloudflare/kumo": "^2.4.0",
     "@phosphor-icons/react": "^2.1.10",
     "@types/node": "^24.6.0",
     "@types/react": "^19.2.13",
     "astro": "^6.1.10",
-    "emdash": "^0.17.2",
+    "emdash": "^0.15.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "tsup": "^8.5.1",
