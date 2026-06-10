@@ -22,7 +22,7 @@
         "vitest": "^3.2.6",
       },
       "peerDependencies": {
-        "@cloudflare/kumo": "^2.4.0",
+        "@cloudflare/kumo": "^1.0.0 || ^2.0.0",
         "@phosphor-icons/react": "^2.1.10",
         "astro": ">=6.0.0",
         "emdash": "^0.15.0",
