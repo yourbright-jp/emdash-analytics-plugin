@@ -1,9 +1,11 @@
 import { generatePrefixedToken, hashPrefixedToken } from "@emdash-cms/auth";
-import type { PluginContext } from "emdash";
+import type { PluginContext, StorageCollection } from "emdash";
 import { PluginRouteError } from "emdash";
 import { ulid } from "ulidx";
 
 import {
+  AGENT_SCOPE_ANALYTICS_READ,
+  AGENT_SCOPE_CONTENT_INSIGHTS_WRITE,
   AGENT_KEY_PREFIX,
   CRON_ENRICH_MANAGED,
   CRON_SYNC_BASE,
@@ -34,7 +36,9 @@ import {
 } from "./google.js";
 import { scorePage } from "./scoring.js";
 import type {
+  AgentKeyMetadata,
   AgentKeyRecord,
+  AgentKeyScope,
   BreakdownRow,
   ContentContextResponse,
   DailyMetricRecord,
@@ -54,6 +58,8 @@ import type {
 } from "./types.js";
 
 type PluginCtx = PluginContext;
+type AgentAuthCtx = Pick<PluginContext, "storage">;
+const DEFAULT_AGENT_KEY_SCOPES: AgentKeyScope[] = [AGENT_SCOPE_ANALYTICS_READ];
 type CombinedTrendMetric = {
   date: string;
   clicks: number;
@@ -464,7 +470,7 @@ export async function getContentContext(
   };
 }
 
-export async function listAgentKeys(ctx: PluginCtx): Promise<Array<Omit<AgentKeyRecord, "hash">>> {
+export async function listAgentKeys(ctx: PluginCtx): Promise<AgentKeyMetadata[]> {
   const result = await ctx.storage.agent_keys.query({
     orderBy: { createdAt: "desc" },
     limit: 100
@@ -474,6 +480,7 @@ export async function listAgentKeys(ctx: PluginCtx): Promise<Array<Omit<AgentKey
     return {
       prefix: record.prefix,
       label: record.label,
+      scopes: resolveAgentKeyScopes(record),
       createdAt: record.createdAt,
       lastUsedAt: record.lastUsedAt,
       revokedAt: record.revokedAt
@@ -481,9 +488,13 @@ export async function listAgentKeys(ctx: PluginCtx): Promise<Array<Omit<AgentKey
   });
 }
 
-export async function createAgentKey(ctx: PluginCtx, label: string): Promise<{
+export async function createAgentKey(
+  ctx: PluginCtx,
+  label: string,
+  scopes: AgentKeyScope[] = DEFAULT_AGENT_KEY_SCOPES
+): Promise<{
   key: string;
-  metadata: Omit<AgentKeyRecord, "hash">;
+  metadata: AgentKeyMetadata;
 }> {
   const created = generatePrefixedToken(AGENT_KEY_PREFIX);
   const key = created.raw;
@@ -494,6 +505,7 @@ export async function createAgentKey(ctx: PluginCtx, label: string): Promise<{
     prefix: created.prefix,
     hash,
     label,
+    scopes: normalizeAgentKeyScopes(scopes),
     createdAt: now,
     lastUsedAt: null,
     revokedAt: null
@@ -505,6 +517,7 @@ export async function createAgentKey(ctx: PluginCtx, label: string): Promise<{
     metadata: {
       prefix: record.prefix,
       label: record.label,
+      scopes: resolveAgentKeyScopes(record),
       createdAt: record.createdAt,
       lastUsedAt: null,
       revokedAt: null
@@ -526,21 +539,70 @@ export async function revokeAgentKey(ctx: PluginCtx, prefix: string): Promise<vo
   await ctx.storage.agent_keys.put(item.id, record);
 }
 
-export async function authenticateAgentRequest(ctx: PluginCtx, request: Request): Promise<void> {
+export async function authenticateAgentRequest(
+  ctx: AgentAuthCtx,
+  request: Request,
+  requiredScope: AgentKeyScope = AGENT_SCOPE_ANALYTICS_READ
+): Promise<AgentKeyMetadata> {
+  return authenticateAgentKey(ctx.storage.agent_keys, request, requiredScope);
+}
+
+export async function authenticateAgentKey(
+  agentKeys: Pick<StorageCollection, "get" | "put">,
+  request: Request,
+  requiredScope: AgentKeyScope = AGENT_SCOPE_ANALYTICS_READ
+): Promise<AgentKeyMetadata> {
   const token = extractAgentToken(request);
   if (!token.startsWith(AGENT_KEY_PREFIX)) {
     throw new PluginRouteError("UNAUTHORIZED", "Missing or invalid agent key", 401);
   }
 
   const hash = hashPrefixedToken(token);
-  const record = await ctx.storage.agent_keys.get(hash);
+  const record = await agentKeys.get(hash);
   const keyRecord = record as AgentKeyRecord | null;
   if (!keyRecord || keyRecord.revokedAt) {
     throw new PluginRouteError("UNAUTHORIZED", "Missing or invalid agent key", 401);
   }
 
+  const scopes = resolveAgentKeyScopes(keyRecord);
+  if (!scopes.includes(requiredScope)) {
+    throw new PluginRouteError(
+      "INSUFFICIENT_AGENT_SCOPE",
+      `Agent key requires the ${requiredScope} scope`,
+      403
+    );
+  }
+
   keyRecord.lastUsedAt = new Date().toISOString();
-  await ctx.storage.agent_keys.put(hash, keyRecord);
+  await agentKeys.put(hash, keyRecord);
+  return {
+    prefix: keyRecord.prefix,
+    label: keyRecord.label,
+    scopes,
+    createdAt: keyRecord.createdAt,
+    lastUsedAt: keyRecord.lastUsedAt,
+    revokedAt: keyRecord.revokedAt
+  };
+}
+
+export function resolveAgentKeyScopes(record: Pick<AgentKeyRecord, "scopes">): AgentKeyScope[] {
+  return normalizeAgentKeyScopes(record.scopes ?? DEFAULT_AGENT_KEY_SCOPES);
+}
+
+function normalizeAgentKeyScopes(scopes: AgentKeyScope[]): AgentKeyScope[] {
+  const normalized = new Set<AgentKeyScope>();
+  for (const scope of scopes) {
+    if (scope === AGENT_SCOPE_ANALYTICS_READ || scope === AGENT_SCOPE_CONTENT_INSIGHTS_WRITE) {
+      normalized.add(scope);
+    }
+  }
+  if (normalized.has(AGENT_SCOPE_CONTENT_INSIGHTS_WRITE)) {
+    normalized.add(AGENT_SCOPE_ANALYTICS_READ);
+  }
+  if (normalized.size === 0) {
+    normalized.add(AGENT_SCOPE_ANALYTICS_READ);
+  }
+  return Array.from(normalized);
 }
 
 export function extractAgentToken(request: Request): string {

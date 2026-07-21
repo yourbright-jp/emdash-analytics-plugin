@@ -142,9 +142,146 @@ export interface AgentKeyRecord {
   prefix: string;
   hash: string;
   label: string;
+  /** Missing on keys created before scoped agent keys were introduced. */
+  scopes?: AgentKeyScope[];
   createdAt: string;
   lastUsedAt: string | null;
   revokedAt: string | null;
+}
+
+export type AgentKeyScope = "analytics:read" | "content-insights:write";
+
+export interface AgentKeyMetadata extends Omit<AgentKeyRecord, "hash" | "scopes"> {
+  scopes: AgentKeyScope[];
+}
+
+export type ContentInsightActionStatus =
+  | "planned"
+  | "applied"
+  | "measuring"
+  | "improved"
+  | "neutral"
+  | "regressed"
+  | "rolled_back"
+  | "failed";
+
+export interface ContentInsightDateRange {
+  startDate: string;
+  endDate: string;
+}
+
+export interface ContentInsightAction {
+  id: string;
+  contentCollection: string;
+  contentId: string;
+  contentSlug: string | null;
+  contentKey: string;
+  urlPath: string;
+  targetQuery: string | null;
+  reason: string;
+  hypothesis: string;
+  changeSummary: string;
+  baselinePeriod: ContentInsightDateRange;
+  measurementPeriod: ContentInsightDateRange;
+  status: ContentInsightActionStatus;
+  emdashRevisionId: string | null;
+  detectedAt: string;
+  revisionLinkedAt: string | null;
+  appliedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StoredContentInsightAction extends ContentInsightAction {
+  /** Set only while the action is open; a unique index enforces one open action per content. */
+  openContentKey: string | null;
+  idempotencyKeyHash: string;
+  requestFingerprint: string;
+  lastMutationId: string;
+  lastMutationFingerprint: string;
+  lastMutationFromStatus: ContentInsightActionStatus | null;
+}
+
+export type ContentInsightActionEventType =
+  | "created"
+  | "revision_linked"
+  | "measurement_recorded"
+  | "status_changed";
+
+export interface ContentInsightActionEvent {
+  id: string;
+  actionId: string;
+  eventType: ContentInsightActionEventType;
+  fromStatus: ContentInsightActionStatus | null;
+  toStatus: ContentInsightActionStatus;
+  actorKeyPrefix: string;
+  metadata: Record<string, string | number | null>;
+  createdAt: string;
+}
+
+export interface StoredContentInsightActionEvent extends ContentInsightActionEvent {
+  idempotencyKeyHash: string;
+  requestFingerprint: string;
+}
+
+export type ContentInsightMeasurementPhase = "baseline" | "post_change";
+
+export interface ContentInsightMeasurement {
+  id: string;
+  actionId: string;
+  phase: ContentInsightMeasurementPhase;
+  source: "gsc";
+  periodStart: string;
+  periodEnd: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+  recordedAt: string;
+}
+
+export interface StoredContentInsightMeasurement extends ContentInsightMeasurement {
+  idempotencyKeyHash: string;
+  requestFingerprint: string;
+  actionStatusAtRecord: ContentInsightActionStatus;
+}
+
+export interface ContentInsightActionDetail {
+  action: ContentInsightAction;
+  events: ContentInsightActionEvent[];
+  measurements: ContentInsightMeasurement[];
+  idempotentReplay?: boolean;
+}
+
+export interface ContentInsightActionListResponse {
+  items: ContentInsightAction[];
+  cursor?: string;
+  hasMore: boolean;
+}
+
+export interface ContentInsightActionCreateInput {
+  contentCollection: string;
+  contentId: string;
+  contentSlug?: string | null;
+  urlPath: string;
+  targetQuery?: string | null;
+  reason: string;
+  hypothesis: string;
+  changeSummary: string;
+  baselinePeriod: ContentInsightDateRange;
+  measurementPeriod: ContentInsightDateRange;
+  detectedAt?: string;
+}
+
+export interface ContentInsightMeasurementInput {
+  actionId: string;
+  phase: ContentInsightMeasurementPhase;
+  periodStart: string;
+  periodEnd: string;
+  clicks: number;
+  impressions: number;
+  position: number;
 }
 
 export interface OpportunityEvidence {

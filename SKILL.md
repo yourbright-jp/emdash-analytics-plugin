@@ -23,6 +23,10 @@ Do not use it for general EmDash core auth/scope changes unless the task explici
 
 - The plugin's public agent endpoints use plugin-scoped tokens with prefix `yb_ins_`.
 - Do not use `Authorization: Bearer yb_ins_...` on those endpoints; EmDash core intercepts Bearer auth first. Use `Authorization: AgentKey ...` or `X-Emdash-Agent-Key`.
+- Treat keys without stored scopes as legacy read-only keys. Action mutations require a separately generated key with `content-insights:write`.
+- Every action mutation requires a unique `Idempotency-Key`; reuse it only for an exact retry.
+- Record the planned action before calling the EmDash Content API, link the returned revision, and only then move the action to `applied`.
+- Plugin storage is the action-ledger source of truth. Do not write directly to EmDash core content/revision tables or store raw GSC/GA4 exports in the ledger.
 - EmDash core PAT/OAuth scopes do not currently substitute for those public plugin endpoints.
 - Stored Google credentials require `EMDASH_AUTH_SECRET` in the runtime environment.
 - In this repo, `landing-page/apps/blog-site` should consume the plugin from the published npm package. Local plugin edits are not automatically included in a normal deploy until a new package version is published and installed.
