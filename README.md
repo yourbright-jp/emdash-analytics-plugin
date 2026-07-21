@@ -264,4 +264,4 @@ bun run deploy:blog
 
 ## Status
 
-Initial implementation for YourBright. The package metadata is ready for public npm release, but npm credentials still need to be configured on this machine before publish.
+Published releases use npm Trusted Publishing from the repository's `release.yml` GitHub Actions workflow. The workflow is started manually and authenticates with short-lived OIDC credentials; no long-lived npm publish token is required.
