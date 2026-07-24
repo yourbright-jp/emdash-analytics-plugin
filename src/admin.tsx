@@ -2,9 +2,14 @@ import type { PluginAdminExports } from "emdash";
 import { apiFetch as baseFetch, parseApiResponse } from "emdash/plugin-utils";
 import * as React from "react";
 
-import { ADMIN_ROUTES, PLUGIN_ID } from "./constants.js";
+import {
+  AGENT_SCOPE_ANALYTICS_READ,
+  AGENT_SCOPE_CONTENT_INSIGHTS_WRITE,
+  ADMIN_ROUTES,
+  PLUGIN_ID
+} from "./constants.js";
 import type {
-  AgentKeyRecord,
+  AgentKeyMetadata,
   BreakdownRow,
   FreshnessState,
   KpiDelta,
@@ -27,7 +32,7 @@ interface StatusResponse {
 
 type OverviewResponse = OverviewData;
 
-interface AgentKeyListItem extends Omit<AgentKeyRecord, "hash"> {}
+interface AgentKeyListItem extends AgentKeyMetadata {}
 
 interface AgentKeyCreateResponse {
   key: string;
@@ -1042,6 +1047,7 @@ function SettingsPage({ embedded = false }: { embedded?: boolean }) {
   const [storedServiceAccountEmail, setStoredServiceAccountEmail] = React.useState<string | null>(null);
   const [keys, setKeys] = React.useState<AgentKeyListItem[]>([]);
   const [newKeyLabel, setNewKeyLabel] = React.useState("");
+  const [newKeyAccess, setNewKeyAccess] = React.useState<"read" | "write">("read");
   const [generatedKey, setGeneratedKey] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -1163,7 +1169,11 @@ function SettingsPage({ embedded = false }: { embedded?: boolean }) {
     setSuccess(null);
     try {
       const response = await apiPost<AgentKeyCreateResponse>(ADMIN_ROUTES.AGENT_KEYS_CREATE, {
-        label: newKeyLabel.trim()
+        label: newKeyLabel.trim(),
+        scopes:
+          newKeyAccess === "write"
+            ? [AGENT_SCOPE_ANALYTICS_READ, AGENT_SCOPE_CONTENT_INSIGHTS_WRITE]
+            : [AGENT_SCOPE_ANALYTICS_READ]
       });
       const data = await parseApiResponse<AgentKeyCreateResponse>(response, "Failed to create API key");
       setGeneratedKey(data.key);
@@ -1241,10 +1251,37 @@ function SettingsPage({ embedded = false }: { embedded?: boolean }) {
         </div>
       </Section>
       <Section title="Agent API Keys" subtitle="Use these with Authorization: AgentKey yb_ins_... or X-Emdash-Agent-Key. Raw keys are shown only once.">
-        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
           <Field label="New key label">
             <Input value={newKeyLabel} onChange={setNewKeyLabel} placeholder="content-feedback-agent" />
           </Field>
+          <fieldset>
+            <legend className="mb-2 text-sm font-medium text-foreground">Access</legend>
+            <div className="flex min-h-10 flex-wrap items-center gap-4">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+                <input
+                  type="radio"
+                  name="new-agent-key-access"
+                  value="read"
+                  checked={newKeyAccess === "read"}
+                  onChange={() => setNewKeyAccess("read")}
+                  className="size-4 accent-primary"
+                />
+                Read only
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+                <input
+                  type="radio"
+                  name="new-agent-key-access"
+                  value="write"
+                  checked={newKeyAccess === "write"}
+                  onChange={() => setNewKeyAccess("write")}
+                  className="size-4 accent-primary"
+                />
+                Read + action write
+              </label>
+            </div>
+          </fieldset>
           <div className="flex items-end">
             <Button onClick={() => void createKey()} disabled={!!busy || !newKeyLabel.trim()}>
               {busy === "create-key" ? "Creating..." : "Create Key"}
@@ -1263,6 +1300,7 @@ function SettingsPage({ embedded = false }: { embedded?: boolean }) {
               <tr>
                 <th className="pb-3 pr-4">Prefix</th>
                 <th className="pb-3 pr-4">Label</th>
+                <th className="pb-3 pr-4">Scopes</th>
                 <th className="pb-3 pr-4">Created</th>
                 <th className="pb-3 pr-4">Last Used</th>
                 <th className="pb-3 pr-4">Status</th>
@@ -1274,6 +1312,7 @@ function SettingsPage({ embedded = false }: { embedded?: boolean }) {
                 <tr key={key.prefix} className="border-t border-border/80">
                   <td className="py-3 pr-4 font-mono text-xs">{key.prefix}</td>
                   <td className="py-3 pr-4">{key.label}</td>
+                  <td className="py-3 pr-4 font-mono text-xs">{key.scopes.join(", ")}</td>
                   <td className="py-3 pr-4">{formatDateTime(key.createdAt)}</td>
                   <td className="py-3 pr-4">{formatDateTime(key.lastUsedAt)}</td>
                   <td className="py-3 pr-4">{key.revokedAt ? "Revoked" : "Active"}</td>

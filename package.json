@@ -1,6 +1,6 @@
 {
   "name": "@yourbright/emdash-analytics-plugin",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Google Search Console and GA4 analytics plugin for EmDash",
   "type": "module",
   "main": "./dist/index.js",
@@ -52,12 +52,12 @@
     "vitest": "^3.2.6"
   },
   "overrides": {
-    "vite": "^7.3.2",
     "esbuild": "^0.28.1",
+    "vite": "^7.3.2",
     "fast-uri": "^3.1.4",
     "devalue": "^5.8.1",
     "dompurify": "^3.4.12",
-    "hono": "^4.12.21",
+    "hono": "^4.12.25",
     "@hono/node-server": "^2.0.5",
     "ip-address": "^10.1.1",
     "js-yaml": "^4.3.0",

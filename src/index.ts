@@ -6,6 +6,16 @@ import {
 import { z } from "astro/zod";
 
 import {
+  createContentInsightAction,
+  getContentInsightAction,
+  linkContentInsightRevision,
+  listContentInsightActions,
+  recordContentInsightMeasurement,
+  requireIdempotencyKey,
+  updateContentInsightActionStatus
+} from "./actions.js";
+import {
+  AGENT_SCOPE_CONTENT_INSIGHTS_WRITE,
   ADMIN_ROUTES,
   CRON_ENRICH_MANAGED,
   CRON_SYNC_BASE,
@@ -30,6 +40,27 @@ import {
   testConnection
 } from "./sync.js";
 
+const agentKeyScopeSchema = z.enum(["analytics:read", "content-insights:write"]);
+const actionStatusSchema = z.enum([
+  "planned",
+  "applied",
+  "measuring",
+  "improved",
+  "neutral",
+  "regressed",
+  "rolled_back",
+  "failed"
+]);
+const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD");
+const dateRangeSchema = z
+  .object({
+    startDate: isoDateSchema,
+    endDate: isoDateSchema
+  })
+  .refine((range) => range.startDate <= range.endDate, {
+    message: "startDate must be on or before endDate"
+  });
+
 const configSaveSchema = z.object({
   siteOrigin: z.string().optional(),
   ga4PropertyId: z.string().optional(),
@@ -52,11 +83,55 @@ const contentContextSchema = z.object({
 });
 
 const agentKeyCreateSchema = z.object({
-  label: z.string().min(1).max(200)
+  label: z.string().min(1).max(200),
+  scopes: z.array(agentKeyScopeSchema).min(1).max(2).optional()
 });
 
 const agentKeyRevokeSchema = z.object({
   prefix: z.string().min(1)
+});
+
+const contentInsightActionCreateSchema = z
+  .object({
+    contentCollection: z.string().min(1).max(100).default("posts"),
+    contentId: z.string().min(1).max(200),
+    contentSlug: z.string().min(1).max(300).nullable().optional(),
+    urlPath: z.string().min(1).max(1000).startsWith("/"),
+    targetQuery: z.string().min(1).max(500).nullable().optional(),
+    reason: z.string().min(1).max(2000),
+    hypothesis: z.string().min(1).max(4000),
+    changeSummary: z.string().min(1).max(4000),
+    baselinePeriod: dateRangeSchema,
+    measurementPeriod: dateRangeSchema,
+    detectedAt: z
+      .string()
+      .refine((value) => !Number.isNaN(Date.parse(value)), "detectedAt must be an ISO timestamp")
+      .optional()
+  })
+  .refine((action) => action.baselinePeriod.endDate < action.measurementPeriod.startDate, {
+    message: "measurementPeriod must start after baselinePeriod ends"
+  });
+
+const contentInsightRevisionSchema = z.object({
+  actionId: z.string().min(1).max(100),
+  revisionId: z.string().min(1).max(200)
+});
+
+const contentInsightMeasurementSchema = z.object({
+  actionId: z.string().min(1).max(100),
+  phase: z.enum(["baseline", "post_change"]),
+  periodStart: isoDateSchema,
+  periodEnd: isoDateSchema,
+  clicks: z.number().int().min(0),
+  impressions: z.number().int().min(0),
+  position: z.number().min(0)
+}).refine((measurement) => measurement.periodStart <= measurement.periodEnd, {
+  message: "periodStart must be on or before periodEnd"
+});
+
+const contentInsightStatusSchema = z.object({
+  actionId: z.string().min(1).max(100),
+  status: actionStatusSchema
 });
 
 type ConfigSaveInput = z.infer<typeof configSaveSchema>;
@@ -125,6 +200,33 @@ export function createPlugin() {
       agent_keys: {
         indexes: ["prefix", "createdAt", "revokedAt"],
         uniqueIndexes: ["hash", "prefix"]
+      },
+      content_insight_actions: {
+        indexes: [
+          "status",
+          "contentKey",
+          "openContentKey",
+          "contentId",
+          "urlPath",
+          "emdashRevisionId",
+          "updatedAt"
+        ],
+        uniqueIndexes: ["idempotencyKeyHash", "openContentKey"]
+      },
+      content_insight_action_events: {
+        indexes: ["actionId", "eventType", "createdAt"],
+        uniqueIndexes: ["idempotencyKeyHash"]
+      },
+      content_insight_measurements: {
+        indexes: [
+          "actionId",
+          "phase",
+          "source",
+          "periodStart",
+          "periodEnd",
+          "recordedAt"
+        ],
+        uniqueIndexes: ["idempotencyKeyHash", ["actionId", "phase", "periodStart", "periodEnd"]]
       }
     },
     hooks: {
@@ -211,7 +313,10 @@ export function createPlugin() {
       },
       [ADMIN_ROUTES.AGENT_KEYS_CREATE]: {
         input: agentKeyCreateSchema,
-        handler: async (ctx) => createAgentKey(ctx, (ctx.input as AgentKeyCreateInput).label)
+        handler: async (ctx) => {
+          const input = ctx.input as AgentKeyCreateInput;
+          return createAgentKey(ctx, input.label, input.scopes);
+        }
       },
       [ADMIN_ROUTES.AGENT_KEYS_REVOKE]: {
         input: agentKeyRevokeSchema,
@@ -270,6 +375,101 @@ export function createPlugin() {
             throw error;
           }
         }
+      },
+      [PUBLIC_AGENT_ROUTES.ACTIONS]: {
+        public: true,
+        handler: async (ctx) => {
+          if (ctx.request.method === "GET") {
+            await authenticateAgentRequest(ctx, ctx.request);
+            const params = new URL(ctx.request.url).searchParams;
+            const actionId = params.get("id")?.trim();
+            if (actionId) {
+              return getContentInsightAction(ctx, actionId);
+            }
+            const rawStatus = params.get("status");
+            const parsedStatus = rawStatus ? actionStatusSchema.safeParse(rawStatus) : null;
+            if (parsedStatus && !parsedStatus.success) {
+              throw new PluginRouteError("BAD_REQUEST", "Invalid action status", 400);
+            }
+            return listContentInsightActions(ctx, {
+              status: parsedStatus?.success ? parsedStatus.data : undefined,
+              contentId: params.get("contentId")?.trim() || undefined,
+              limit: Math.min(parsePositiveInt(params.get("limit")) || 50, 100),
+              cursor: params.get("cursor") || undefined
+            });
+          }
+          requireMethod(ctx.request, "POST");
+          const agent = await authenticateAgentRequest(
+            ctx,
+            ctx.request,
+            AGENT_SCOPE_CONTENT_INSIGHTS_WRITE
+          );
+          const input = parseRouteInput(contentInsightActionCreateSchema, ctx.input);
+          return createContentInsightAction(
+            ctx,
+            input,
+            requireIdempotencyKey(ctx.request),
+            agent.prefix
+          );
+        }
+      },
+      [PUBLIC_AGENT_ROUTES.ACTION_LINK_REVISION]: {
+        public: true,
+        input: contentInsightRevisionSchema,
+        handler: async (ctx) => {
+          requireMethod(ctx.request, "POST");
+          const agent = await authenticateAgentRequest(
+            ctx,
+            ctx.request,
+            AGENT_SCOPE_CONTENT_INSIGHTS_WRITE
+          );
+          const input = ctx.input as z.infer<typeof contentInsightRevisionSchema>;
+          return linkContentInsightRevision(
+            ctx,
+            input.actionId,
+            input.revisionId,
+            requireIdempotencyKey(ctx.request),
+            agent.prefix
+          );
+        }
+      },
+      [PUBLIC_AGENT_ROUTES.ACTION_MEASUREMENTS]: {
+        public: true,
+        input: contentInsightMeasurementSchema,
+        handler: async (ctx) => {
+          requireMethod(ctx.request, "POST");
+          const agent = await authenticateAgentRequest(
+            ctx,
+            ctx.request,
+            AGENT_SCOPE_CONTENT_INSIGHTS_WRITE
+          );
+          return recordContentInsightMeasurement(
+            ctx,
+            ctx.input as z.infer<typeof contentInsightMeasurementSchema>,
+            requireIdempotencyKey(ctx.request),
+            agent.prefix
+          );
+        }
+      },
+      [PUBLIC_AGENT_ROUTES.ACTION_STATUS]: {
+        public: true,
+        input: contentInsightStatusSchema,
+        handler: async (ctx) => {
+          requireMethod(ctx.request, "POST");
+          const agent = await authenticateAgentRequest(
+            ctx,
+            ctx.request,
+            AGENT_SCOPE_CONTENT_INSIGHTS_WRITE
+          );
+          const input = ctx.input as z.infer<typeof contentInsightStatusSchema>;
+          return updateContentInsightActionStatus(
+            ctx,
+            input.actionId,
+            input.status,
+            requireIdempotencyKey(ctx.request),
+            agent.prefix
+          );
+        }
       }
     },
     admin: {
@@ -289,4 +489,23 @@ function parsePositiveInt(value: string | null): number | undefined {
   if (!value) return undefined;
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function requireMethod(request: Request, expected: "POST"): void {
+  if (request.method !== expected) {
+    throw new PluginRouteError("METHOD_NOT_ALLOWED", `Use ${expected} for this endpoint`, 405);
+  }
+}
+
+function parseRouteInput<T>(schema: z.ZodType<T>, input: unknown): T {
+  const parsed = schema.safeParse(input);
+  if (!parsed.success) {
+    throw new PluginRouteError(
+      "VALIDATION_ERROR",
+      "Invalid request body",
+      400,
+      parsed.error.format()
+    );
+  }
+  return parsed.data;
 }
