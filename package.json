@@ -49,20 +49,23 @@
     "react-dom": "^19.2.0",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.6"
+    "vitest": "^4.1.10"
   },
   "overrides": {
     "esbuild": "^0.28.1",
-    "vite": "^7.3.2",
+    "vite": "^8.0.13",
     "fast-uri": "^3.1.4",
     "devalue": "^5.8.1",
-    "dompurify": "^3.4.0",
+    "dompurify": "^3.4.12",
     "hono": "^4.12.25",
-    "@hono/node-server": "^1.19.13",
+    "@hono/node-server": "^2.0.5",
     "ip-address": "^10.1.1",
+    "js-yaml": "^4.3.0",
     "postcss": "^8.5.10",
     "qs": "^6.15.2",
-    "sanitize-html": "^2.17.3"
+    "sanitize-html": "^2.17.3",
+    "sharp": "^0.35.0",
+    "svgo": "^4.0.2"
   },
   "scripts": {
     "build": "tsup",
