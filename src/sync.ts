@@ -108,10 +108,16 @@ export async function testConnection(
 export async function syncBase(
   ctx: PluginCtx,
   jobType: SyncRunRecord["jobType"],
-  options: { persistDailyMetrics?: boolean; pageWriteConcurrency?: number } = {}
+  options: {
+    persistDailyMetrics?: boolean;
+    pageWriteConcurrency?: number;
+    pageWriteAfterId?: string | null;
+    pageWriteLimit?: number;
+  } = {}
 ): Promise<{
   trackedPages: number;
   managedPages: number;
+  nextPageCursor: string | null;
 }> {
   const config = await requireConfig(ctx);
   if (!ctx.http) {
@@ -209,24 +215,47 @@ export async function syncBase(
     page.opportunityTags = score.tags;
   }
 
-  const pageEntries = Array.from(pages.values()).map((page) => ({
-    id: pageStorageId(page.urlPath),
-    data: page
-  }));
+  const pageEntries = Array.from(pages.values())
+    .map((page) => ({
+      id: pageStorageId(page.urlPath),
+      data: page
+    }))
+    .sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
+  const pageWriteStart = options.pageWriteAfterId
+    ? pageEntries.findIndex((entry) => entry.id > options.pageWriteAfterId!)
+    : 0;
+  const normalizedStart = pageWriteStart < 0 ? pageEntries.length : pageWriteStart;
+  const pageWriteEnd =
+    options.pageWriteLimit && options.pageWriteLimit > 0
+      ? normalizedStart + options.pageWriteLimit
+      : pageEntries.length;
+  const pendingPageEntries = pageEntries.slice(normalizedStart, pageWriteEnd);
   if (options.pageWriteConcurrency && options.pageWriteConcurrency > 0) {
     // EmDash's D1 transaction probe can hang after committing the first rows.
     // Agent sync therefore uses idempotent single-row upserts with bounded
     // concurrency, avoiding putMany's transaction path without serializing
     // hundreds of D1 round trips.
-    for (let offset = 0; offset < pageEntries.length; offset += options.pageWriteConcurrency) {
+    for (let offset = 0; offset < pendingPageEntries.length; offset += options.pageWriteConcurrency) {
       await Promise.all(
-        pageEntries.slice(offset, offset + options.pageWriteConcurrency).map((entry) =>
+        pendingPageEntries.slice(offset, offset + options.pageWriteConcurrency).map((entry) =>
           ctx.storage.pages.put(entry.id, entry.data)
         )
       );
     }
   } else {
-    await ctx.storage.pages.putMany(pageEntries);
+    await ctx.storage.pages.putMany(pendingPageEntries);
+  }
+
+  const nextPageCursor =
+    normalizedStart + pendingPageEntries.length < pageEntries.length
+      ? pendingPageEntries.at(-1)?.id ?? options.pageWriteAfterId ?? null
+      : null;
+  if (nextPageCursor) {
+    return {
+      trackedPages: pages.size,
+      managedPages: Array.from(pages.values()).filter((page) => page.managed).length,
+      nextPageCursor
+    };
   }
 
   const combinedTrend = mergeTrend(gscTrend, gaTrend);
@@ -289,7 +318,8 @@ export async function syncBase(
 
   return {
     trackedPages: pages.size,
-    managedPages: Array.from(pages.values()).filter((page) => page.managed).length
+    managedPages: Array.from(pages.values()).filter((page) => page.managed).length,
+    nextPageCursor: null
   };
 }
 
