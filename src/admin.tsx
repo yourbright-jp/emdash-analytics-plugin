@@ -4,6 +4,7 @@ import * as React from "react";
 
 import {
   AGENT_SCOPE_ANALYTICS_READ,
+  AGENT_SCOPE_ANALYTICS_SYNC,
   AGENT_SCOPE_CONTENT_INSIGHTS_WRITE,
   ADMIN_ROUTES,
   PLUGIN_ID
@@ -50,6 +51,25 @@ interface StoredConfigFields {
   siteOrigin: string;
   ga4PropertyId: string;
   gscSiteUrl: string;
+}
+
+type AgentKeyAccess = "read" | "write" | "sync" | "automation";
+
+function scopesForAgentKeyAccess(access: AgentKeyAccess) {
+  if (access === "automation") {
+    return [
+      AGENT_SCOPE_ANALYTICS_READ,
+      AGENT_SCOPE_ANALYTICS_SYNC,
+      AGENT_SCOPE_CONTENT_INSIGHTS_WRITE
+    ];
+  }
+  if (access === "sync") {
+    return [AGENT_SCOPE_ANALYTICS_READ, AGENT_SCOPE_ANALYTICS_SYNC];
+  }
+  if (access === "write") {
+    return [AGENT_SCOPE_ANALYTICS_READ, AGENT_SCOPE_CONTENT_INSIGHTS_WRITE];
+  }
+  return [AGENT_SCOPE_ANALYTICS_READ];
 }
 
 const EMPTY_CONFIG: ConfigDraft = {
@@ -1047,7 +1067,7 @@ function SettingsPage({ embedded = false }: { embedded?: boolean }) {
   const [storedServiceAccountEmail, setStoredServiceAccountEmail] = React.useState<string | null>(null);
   const [keys, setKeys] = React.useState<AgentKeyListItem[]>([]);
   const [newKeyLabel, setNewKeyLabel] = React.useState("");
-  const [newKeyAccess, setNewKeyAccess] = React.useState<"read" | "write">("read");
+  const [newKeyAccess, setNewKeyAccess] = React.useState<AgentKeyAccess>("read");
   const [generatedKey, setGeneratedKey] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -1170,10 +1190,7 @@ function SettingsPage({ embedded = false }: { embedded?: boolean }) {
     try {
       const response = await apiPost<AgentKeyCreateResponse>(ADMIN_ROUTES.AGENT_KEYS_CREATE, {
         label: newKeyLabel.trim(),
-        scopes:
-          newKeyAccess === "write"
-            ? [AGENT_SCOPE_ANALYTICS_READ, AGENT_SCOPE_CONTENT_INSIGHTS_WRITE]
-            : [AGENT_SCOPE_ANALYTICS_READ]
+        scopes: scopesForAgentKeyAccess(newKeyAccess)
       });
       const data = await parseApiResponse<AgentKeyCreateResponse>(response, "Failed to create API key");
       setGeneratedKey(data.key);
@@ -1279,6 +1296,28 @@ function SettingsPage({ embedded = false }: { embedded?: boolean }) {
                   className="size-4 accent-primary"
                 />
                 Read + action write
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+                <input
+                  type="radio"
+                  name="new-agent-key-access"
+                  value="sync"
+                  checked={newKeyAccess === "sync"}
+                  onChange={() => setNewKeyAccess("sync")}
+                  className="size-4 accent-primary"
+                />
+                Read + analytics sync
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+                <input
+                  type="radio"
+                  name="new-agent-key-access"
+                  value="automation"
+                  checked={newKeyAccess === "automation"}
+                  onChange={() => setNewKeyAccess("automation")}
+                  className="size-4 accent-primary"
+                />
+                Full automation
               </label>
             </div>
           </fieldset>

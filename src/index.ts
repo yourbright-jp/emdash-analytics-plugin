@@ -6,6 +6,11 @@ import {
 import { z } from "astro/zod";
 
 import {
+  getAgentSyncRun,
+  handleAgentSyncCron,
+  requestAgentSync
+} from "./agent-sync.js";
+import {
   createContentInsightAction,
   getContentInsightAction,
   linkContentInsightRevision,
@@ -15,6 +20,7 @@ import {
   updateContentInsightActionStatus
 } from "./actions.js";
 import {
+  AGENT_SCOPE_ANALYTICS_SYNC,
   AGENT_SCOPE_CONTENT_INSIGHTS_WRITE,
   ADMIN_ROUTES,
   CRON_ENRICH_MANAGED,
@@ -40,7 +46,11 @@ import {
   testConnection
 } from "./sync.js";
 
-const agentKeyScopeSchema = z.enum(["analytics:read", "content-insights:write"]);
+const agentKeyScopeSchema = z.enum([
+  "analytics:read",
+  "analytics:sync",
+  "content-insights:write"
+]);
 const actionStatusSchema = z.enum([
   "planned",
   "applied",
@@ -84,7 +94,7 @@ const contentContextSchema = z.object({
 
 const agentKeyCreateSchema = z.object({
   label: z.string().min(1).max(200),
-  scopes: z.array(agentKeyScopeSchema).min(1).max(2).optional()
+  scopes: z.array(agentKeyScopeSchema).min(1).max(3).optional()
 });
 
 const agentKeyRevokeSchema = z.object({
@@ -197,6 +207,10 @@ export function createPlugin() {
       sync_runs: {
         indexes: ["jobType", "status", "startedAt"]
       },
+      agent_sync_runs: {
+        indexes: ["status", "openLockKey", "actorKeyPrefix", "createdAt", "finishedAt"],
+        uniqueIndexes: ["idempotencyKeyHash", "openLockKey"]
+      },
       agent_keys: {
         indexes: ["prefix", "createdAt", "revokedAt"],
         uniqueIndexes: ["hash", "prefix"]
@@ -240,6 +254,7 @@ export function createPlugin() {
       },
       cron: {
         handler: async (event, ctx) => {
+          if (await handleAgentSyncCron(ctx, event.name, event.data)) return;
           await handleCron(ctx, event.name);
         }
       }
@@ -374,6 +389,26 @@ export function createPlugin() {
             });
             throw error;
           }
+        }
+      },
+      [PUBLIC_AGENT_ROUTES.SYNC]: {
+        public: true,
+        handler: async (ctx) => {
+          const agent = await authenticateAgentRequest(
+            ctx,
+            ctx.request,
+            AGENT_SCOPE_ANALYTICS_SYNC
+          );
+          if (ctx.request.method === "GET") {
+            const runId = new URL(ctx.request.url).searchParams.get("id")?.trim() ?? "";
+            return getAgentSyncRun(ctx, runId);
+          }
+          requireMethod(ctx.request, "POST");
+          return requestAgentSync(
+            ctx,
+            requireIdempotencyKey(ctx.request),
+            agent.prefix
+          );
         }
       },
       [PUBLIC_AGENT_ROUTES.ACTIONS]: {
