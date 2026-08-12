@@ -257,21 +257,22 @@ export async function syncBase(
     lastStatus: "success"
   };
   const summary = buildSummary(Array.from(pages.values()), combinedTrend, windows);
-  await Promise.all([
-    ctx.kv.set(FRESHNESS_KEY, freshness),
-    ctx.kv.set(SITE_SUMMARY_KEY, summary),
-    writeSyncRun(ctx, {
-      jobType,
-      status: "success",
-      startedAt,
-      finishedAt: nowIso,
-      summary: {
-        trackedPages: pages.size,
-        managedPages: Array.from(pages.values()).filter((page) => page.managed).length
-      },
-      error: null
-    })
-  ]);
+  // EmDash's Cloudflare persistence adapters share the same D1 database.
+  // Keep the final writes sequential so concurrent transactions cannot block
+  // one another and leave a sync run stuck after the page batch is committed.
+  await ctx.kv.set(FRESHNESS_KEY, freshness);
+  await ctx.kv.set(SITE_SUMMARY_KEY, summary);
+  await writeSyncRun(ctx, {
+    jobType,
+    status: "success",
+    startedAt,
+    finishedAt: nowIso,
+    summary: {
+      trackedPages: pages.size,
+      managedPages: Array.from(pages.values()).filter((page) => page.managed).length
+    },
+    error: null
+  });
 
   return {
     trackedPages: pages.size,
