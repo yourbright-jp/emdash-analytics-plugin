@@ -108,7 +108,7 @@ export async function testConnection(
 export async function syncBase(
   ctx: PluginCtx,
   jobType: SyncRunRecord["jobType"],
-  options: { persistDailyMetrics?: boolean; pageBatchSize?: number } = {}
+  options: { persistDailyMetrics?: boolean; pageWriteConcurrency?: number } = {}
 ): Promise<{
   trackedPages: number;
   managedPages: number;
@@ -213,9 +213,17 @@ export async function syncBase(
     id: pageStorageId(page.urlPath),
     data: page
   }));
-  if (options.pageBatchSize && options.pageBatchSize > 0) {
-    for (let offset = 0; offset < pageEntries.length; offset += options.pageBatchSize) {
-      await ctx.storage.pages.putMany(pageEntries.slice(offset, offset + options.pageBatchSize));
+  if (options.pageWriteConcurrency && options.pageWriteConcurrency > 0) {
+    // EmDash's D1 transaction probe can hang after committing the first rows.
+    // Agent sync therefore uses idempotent single-row upserts with bounded
+    // concurrency, avoiding putMany's transaction path without serializing
+    // hundreds of D1 round trips.
+    for (let offset = 0; offset < pageEntries.length; offset += options.pageWriteConcurrency) {
+      await Promise.all(
+        pageEntries.slice(offset, offset + options.pageWriteConcurrency).map((entry) =>
+          ctx.storage.pages.put(entry.id, entry.data)
+        )
+      );
     }
   } else {
     await ctx.storage.pages.putMany(pageEntries);
