@@ -99,7 +99,7 @@ describe("agent analytics sync cron", () => {
 
     expect(syncBase).toHaveBeenCalledWith(fixture.ctx, "agent", {
       persistDailyMetrics: false,
-      persistPagesInTransaction: false
+      pageBatchSize: 50
     });
 
     expect(fixture.records.get(queued.run.id)).toMatchObject({

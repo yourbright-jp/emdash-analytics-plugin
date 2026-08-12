@@ -108,7 +108,7 @@ export async function testConnection(
 export async function syncBase(
   ctx: PluginCtx,
   jobType: SyncRunRecord["jobType"],
-  options: { persistDailyMetrics?: boolean; persistPagesInTransaction?: boolean } = {}
+  options: { persistDailyMetrics?: boolean; pageBatchSize?: number } = {}
 ): Promise<{
   trackedPages: number;
   managedPages: number;
@@ -213,9 +213,9 @@ export async function syncBase(
     id: pageStorageId(page.urlPath),
     data: page
   }));
-  if (options.persistPagesInTransaction === false) {
-    for (const entry of pageEntries) {
-      await ctx.storage.pages.put(entry.id, entry.data);
+  if (options.pageBatchSize && options.pageBatchSize > 0) {
+    for (let offset = 0; offset < pageEntries.length; offset += options.pageBatchSize) {
+      await ctx.storage.pages.putMany(pageEntries.slice(offset, offset + options.pageBatchSize));
     }
   } else {
     await ctx.storage.pages.putMany(pageEntries);
