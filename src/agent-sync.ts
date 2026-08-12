@@ -144,7 +144,7 @@ export async function handleAgentSyncCron(
   try {
     const base = await syncBase(ctx, "agent", {
       persistDailyMetrics: false,
-      pageBatchSize: 50
+      pageBatchSize: 10
     });
     const finishedAt = new Date().toISOString();
     await ctx.storage.agent_sync_runs.put(runId, {
