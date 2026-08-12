@@ -51,6 +51,13 @@ describe("resolveAgentKeyScopes", () => {
       "analytics:read"
     ]);
   });
+
+  it("makes sync keys explicitly readable without granting action writes", () => {
+    expect(resolveAgentKeyScopes({ scopes: ["analytics:sync"] })).toEqual([
+      "analytics:sync",
+      "analytics:read"
+    ]);
+  });
 });
 
 describe("authenticateAgentRequest", () => {
@@ -99,6 +106,52 @@ describe("authenticateAgentRequest", () => {
       "content-insights:write"
     );
     expect(authenticated.scopes).toContain("content-insights:write");
+  });
+
+  it("rejects a read and action-write key on analytics sync routes", async () => {
+    const token = "yb_ins_writer_without_sync";
+    const hash = hashPrefixedToken(token);
+    const record: AgentKeyRecord = {
+      prefix: "yb_ins_write",
+      hash,
+      label: "automation writer",
+      scopes: ["analytics:read", "content-insights:write"],
+      createdAt: "2026-07-01T00:00:00.000Z",
+      lastUsedAt: null,
+      revokedAt: null
+    };
+    const request = new Request("https://example.com", {
+      headers: { Authorization: `AgentKey ${token}` }
+    });
+
+    await expect(
+      authenticateAgentKey(agentKeyStorage(hash, record), request, "analytics:sync")
+    ).rejects.toMatchObject({ code: "INSUFFICIENT_AGENT_SCOPE", status: 403 });
+  });
+
+  it("accepts a dedicated analytics sync key", async () => {
+    const token = "yb_ins_sync_example";
+    const hash = hashPrefixedToken(token);
+    const record: AgentKeyRecord = {
+      prefix: "yb_ins_sync",
+      hash,
+      label: "analytics refresher",
+      scopes: ["analytics:read", "analytics:sync"],
+      createdAt: "2026-07-01T00:00:00.000Z",
+      lastUsedAt: null,
+      revokedAt: null
+    };
+    const request = new Request("https://example.com", {
+      headers: { Authorization: `AgentKey ${token}` }
+    });
+
+    const authenticated = await authenticateAgentKey(
+      agentKeyStorage(hash, record),
+      request,
+      "analytics:sync"
+    );
+    expect(authenticated.scopes).toContain("analytics:sync");
+    expect(authenticated.scopes).not.toContain("content-insights:write");
   });
 });
 

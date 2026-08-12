@@ -78,5 +78,19 @@ bun run deploy:blog
 - Fix `Save Settings` validation or encryption failures
 - Adjust how empty settings fields merge with saved config
 - Change plugin-scoped API key behavior or docs
+- Add or operate purpose-scoped analytics refresh keys (`analytics:sync`)
 - Update README after auth or deploy behavior changes
 - Re-deploy blog staging with the latest local plugin changes
+
+## Agent Analytics Sync
+
+- Keep `admin/sync-now` behind normal EmDash admin authentication.
+- Agent refreshes use `POST agent/v1/sync` with a plugin key scoped to `analytics:sync` and a unique
+  `Idempotency-Key`; never expand a general EmDash content API key to admin scope for this purpose.
+- Prefer a dedicated secret such as `EMDASH_ANALYTICS_SYNC_KEY` with `analytics:read` and
+  `analytics:sync`. Add `content-insights:write` only when the same automation must mutate the
+  content-improvement ledger.
+- Poll `GET agent/v1/sync?id=<run-id>` until `success` or `error`. Do not consider the accepted HTTP
+  response itself proof that GSC/GA4 data is fresh.
+- The sync queue is single-flight and has a 15-minute post-success cooldown. Reuse the same
+  idempotency key only for retries of the same logical request.

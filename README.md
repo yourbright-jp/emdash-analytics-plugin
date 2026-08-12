@@ -97,16 +97,20 @@ This plugin intentionally uses its own API keys for `agent/v1/*`.
 - They are independent from EmDash core PAT/OAuth tokens
 - Existing keys and new `Read only` keys have `analytics:read`
 - `Read + action write` keys have both `analytics:read` and `content-insights:write`
+- `Read + analytics sync` keys have both `analytics:read` and `analytics:sync`
+- `Full automation` keys have all three scopes
 
 This means:
 
 - EmDash admin/private plugin routes use EmDash auth
 - public analytics agent routes require `analytics:read`
+- analytics refresh requests require a separately generated key with `analytics:sync`
 - action mutations require a separately generated key with `content-insights:write`
 
 Keys created before scoped keys were introduced remain valid and are treated as read-only. Create a
-new write-capable key in `Analytics > Settings > Agent API Keys`; do not reuse a general analytics
-reader for Codex Automation mutations.
+new purpose-scoped key in `Analytics > Settings > Agent API Keys`; do not reuse a general analytics
+reader for Codex Automation mutations. `analytics:sync` does not grant EmDash admin access and does
+not permit content-insight action writes.
 
 ## Agent API
 
@@ -117,6 +121,11 @@ Public read endpoints:
 - `GET /_emdash/api/plugins/emdash-google-analytics-dashboard/agent/v1/content-context?collection=posts&id=<id>`
 - `GET /_emdash/api/plugins/emdash-google-analytics-dashboard/agent/v1/actions?status=measuring`
 - `GET /_emdash/api/plugins/emdash-google-analytics-dashboard/agent/v1/actions?id=<action-id>`
+
+Analytics sync endpoints:
+
+- `POST /_emdash/api/plugins/emdash-google-analytics-dashboard/agent/v1/sync`
+- `GET /_emdash/api/plugins/emdash-google-analytics-dashboard/agent/v1/sync?id=<run-id>`
 
 Action write endpoints:
 
@@ -142,6 +151,43 @@ X-Emdash-Agent-Key: yb_ins_...
 
 Every write also requires an `Idempotency-Key` header between 8 and 200 characters. Reuse the same
 key only when retrying the exact same mutation. Reusing it with a different body returns `409`.
+
+## Analytics Sync Workflow
+
+Use a dedicated key with `analytics:read` and `analytics:sync`. The admin-only
+`admin/sync-now` route remains unchanged and is not available to agent keys.
+
+### 1. Queue a sync
+
+```bash
+curl --request POST \
+  --header "Authorization: AgentKey $EMDASH_ANALYTICS_SYNC_KEY" \
+  --header "Idempotency-Key: analytics-sync-2026-08-12" \
+  "$SITE_ORIGIN/_emdash/api/plugins/emdash-google-analytics-dashboard/agent/v1/sync"
+```
+
+The response includes an `asr_...` run ID, a `queued`, `running`, or `retrying` status, and a
+recommended polling delay. EmDash plugin routes currently wrap accepted work in an HTTP `200`
+response, so callers must inspect `data.accepted` and `data.run.status` rather than treating the
+HTTP status alone as completion.
+
+The plugin persists the run before scheduling a durable one-shot cron task. The task refreshes the
+base GSC/GA4 data and managed-query enrichment, retries up to five times with exponential backoff,
+and marks the run `success` or `error`. Only one sync may be open at a time. A successful run also
+starts a 15-minute cooldown. Repeating the same `Idempotency-Key` returns the original run without
+starting duplicate work.
+
+### 2. Poll the run
+
+```bash
+curl \
+  --header "Authorization: AgentKey $EMDASH_ANALYTICS_SYNC_KEY" \
+  "$SITE_ORIGIN/_emdash/api/plugins/emdash-google-analytics-dashboard/agent/v1/sync?id=asr_..."
+```
+
+Treat only `success` as a completed refresh. `queued`, `running`, and `retrying` remain open;
+`error` is terminal. Freshness metadata is updated by the existing base sync only after its data
+writes succeed.
 
 ## Content Improvement Workflow
 

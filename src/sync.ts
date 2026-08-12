@@ -5,6 +5,7 @@ import { ulid } from "ulidx";
 
 import {
   AGENT_SCOPE_ANALYTICS_READ,
+  AGENT_SCOPE_ANALYTICS_SYNC,
   AGENT_SCOPE_CONTENT_INSIGHTS_WRITE,
   AGENT_KEY_PREFIX,
   CRON_ENRICH_MANAGED,
@@ -592,11 +593,18 @@ export function resolveAgentKeyScopes(record: Pick<AgentKeyRecord, "scopes">): A
 function normalizeAgentKeyScopes(scopes: AgentKeyScope[]): AgentKeyScope[] {
   const normalized = new Set<AgentKeyScope>();
   for (const scope of scopes) {
-    if (scope === AGENT_SCOPE_ANALYTICS_READ || scope === AGENT_SCOPE_CONTENT_INSIGHTS_WRITE) {
+    if (
+      scope === AGENT_SCOPE_ANALYTICS_READ ||
+      scope === AGENT_SCOPE_ANALYTICS_SYNC ||
+      scope === AGENT_SCOPE_CONTENT_INSIGHTS_WRITE
+    ) {
       normalized.add(scope);
     }
   }
-  if (normalized.has(AGENT_SCOPE_CONTENT_INSIGHTS_WRITE)) {
+  if (
+    normalized.has(AGENT_SCOPE_ANALYTICS_SYNC) ||
+    normalized.has(AGENT_SCOPE_CONTENT_INSIGHTS_WRITE)
+  ) {
     normalized.add(AGENT_SCOPE_ANALYTICS_READ);
   }
   if (normalized.size === 0) {

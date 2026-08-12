@@ -1,7 +1,8 @@
 export const PLUGIN_ID = "emdash-google-analytics-dashboard";
-export const PLUGIN_VERSION = "0.3.0";
+export const PLUGIN_VERSION = "0.4.0";
 export const AGENT_KEY_PREFIX = "yb_ins_";
 export const AGENT_SCOPE_ANALYTICS_READ = "analytics:read";
+export const AGENT_SCOPE_ANALYTICS_SYNC = "analytics:sync";
 export const AGENT_SCOPE_CONTENT_INSIGHTS_WRITE = "content-insights:write";
 
 export const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -26,11 +27,13 @@ export const CONFIG_SERVICE_ACCOUNT_KEY = "settings:serviceAccountCiphertext";
 
 export const CRON_SYNC_BASE = "sync-base";
 export const CRON_ENRICH_MANAGED = "enrich-managed-queries";
+export const CRON_AGENT_SYNC_PREFIX = "agent-sync-";
 
 export const PUBLIC_AGENT_ROUTES = {
   SITE_SUMMARY: "agent/v1/site-summary",
   OPPORTUNITIES: "agent/v1/opportunities",
   CONTENT_CONTEXT: "agent/v1/content-context",
+  SYNC: "agent/v1/sync",
   ACTIONS: "agent/v1/actions",
   ACTION_LINK_REVISION: "agent/v1/actions/link-revision",
   ACTION_MEASUREMENTS: "agent/v1/actions/measurements",

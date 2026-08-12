@@ -26,5 +26,9 @@ describe("plugin contract", () => {
     expect(plugin.storage.content_insight_measurements).toMatchObject({
       indexes: expect.arrayContaining(["actionId", "phase", "periodStart", "periodEnd"])
     });
+    expect(plugin.storage.agent_sync_runs).toMatchObject({
+      indexes: expect.arrayContaining(["status", "openLockKey", "createdAt", "finishedAt"]),
+      uniqueIndexes: ["idempotencyKeyHash", "openLockKey"]
+    });
   });
 });

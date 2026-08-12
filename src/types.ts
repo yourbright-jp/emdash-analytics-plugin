@@ -130,7 +130,7 @@ export interface DailyMetricRecord {
 }
 
 export interface SyncRunRecord {
-  jobType: "sync-base" | "enrich-managed-queries" | "manual";
+  jobType: "sync-base" | "enrich-managed-queries" | "manual" | "agent";
   status: "running" | "success" | "degraded" | "error";
   startedAt: string;
   finishedAt: string | null;
@@ -149,10 +149,39 @@ export interface AgentKeyRecord {
   revokedAt: string | null;
 }
 
-export type AgentKeyScope = "analytics:read" | "content-insights:write";
+export type AgentKeyScope = "analytics:read" | "analytics:sync" | "content-insights:write";
 
 export interface AgentKeyMetadata extends Omit<AgentKeyRecord, "hash" | "scopes"> {
   scopes: AgentKeyScope[];
+}
+
+export type AgentSyncRunStatus = "queued" | "running" | "retrying" | "success" | "error";
+
+export interface AgentSyncRun {
+  id: string;
+  status: AgentSyncRunStatus;
+  actorKeyPrefix: string;
+  createdAt: string;
+  startedAt: string | null;
+  updatedAt: string;
+  finishedAt: string | null;
+  nextRetryAt: string | null;
+  attemptCount: number;
+  summary: Record<string, unknown> | null;
+  error: string | null;
+}
+
+export interface StoredAgentSyncRun extends Omit<AgentSyncRun, "id"> {
+  idempotencyKeyHash: string;
+  /** Non-null while queued, running, or retrying; a unique index enforces single-flight. */
+  openLockKey: string | null;
+}
+
+export interface AgentSyncRunResponse {
+  accepted: boolean;
+  idempotentReplay: boolean;
+  retryAfterSeconds: number;
+  run: AgentSyncRun;
 }
 
 export type ContentInsightActionStatus =
