@@ -105,7 +105,11 @@ export async function testConnection(
   return runConnectionTest(ctx.http, config, parseServiceAccount(config.serviceAccountJson));
 }
 
-export async function syncBase(ctx: PluginCtx, jobType: SyncRunRecord["jobType"]): Promise<{
+export async function syncBase(
+  ctx: PluginCtx,
+  jobType: SyncRunRecord["jobType"],
+  options: { persistDailyMetrics?: boolean } = {}
+): Promise<{
   trackedPages: number;
   managedPages: number;
 }> {
@@ -213,8 +217,9 @@ export async function syncBase(ctx: PluginCtx, jobType: SyncRunRecord["jobType"]
   );
 
   const combinedTrend = mergeTrend(gscTrend, gaTrend);
-  await ctx.storage.daily_metrics.putMany(
-    combinedTrend.flatMap((row) => [
+  if (options.persistDailyMetrics !== false) {
+    await ctx.storage.daily_metrics.putMany(
+      combinedTrend.flatMap((row) => [
       {
         id: dailyMetricStorageId("gsc", "all_public", row.date),
         data: {
@@ -241,8 +246,9 @@ export async function syncBase(ctx: PluginCtx, jobType: SyncRunRecord["jobType"]
           users: row.users
         } satisfies DailyMetricRecord
       }
-    ])
-  );
+      ])
+    );
+  }
 
   const freshness: FreshnessState = {
     lastSyncedAt: nowIso,
