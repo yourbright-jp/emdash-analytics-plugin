@@ -6,12 +6,11 @@ import {
   handleAgentSyncCron,
   requestAgentSync
 } from "../src/agent-sync.js";
-import { enrichManagedQueries, syncBase } from "../src/sync.js";
+import { syncBase } from "../src/sync.js";
 import type { StoredAgentSyncRun } from "../src/types.js";
 
 vi.mock("../src/sync.js", () => ({
-  syncBase: vi.fn(),
-  enrichManagedQueries: vi.fn()
+  syncBase: vi.fn()
 }));
 
 afterEach(() => {
@@ -89,11 +88,10 @@ describe("agent analytics sync requests", () => {
 });
 
 describe("agent analytics sync cron", () => {
-  it("marks a run successful only after base and query enrichment complete", async () => {
+  it("marks a run successful after the freshness-bearing base sync completes", async () => {
     const fixture = createFixture();
     const queued = await requestAgentSync(fixture.ctx, "sync-cron-success", "yb_ins_sync");
     vi.mocked(syncBase).mockResolvedValue({ trackedPages: 120, managedPages: 80 });
-    vi.mocked(enrichManagedQueries).mockResolvedValue({ refreshedPages: 25 });
 
     await expect(
       handleAgentSyncCron(fixture.ctx, `agent-sync-${queued.run.id}`, { runId: queued.run.id })
@@ -104,7 +102,7 @@ describe("agent analytics sync cron", () => {
       attemptCount: 1,
       openLockKey: null,
       error: null,
-      summary: { trackedPages: 120, managedPages: 80, refreshedPages: 25 }
+      summary: { trackedPages: 120, managedPages: 80 }
     });
   });
 

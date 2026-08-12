@@ -172,8 +172,9 @@ response, so callers must inspect `data.accepted` and `data.run.status` rather t
 HTTP status alone as completion.
 
 The plugin persists the run before scheduling a durable one-shot cron task. The task refreshes the
-base GSC/GA4 data and managed-query enrichment, retries up to five times with exponential backoff,
-and marks the run `success` or `error`. Only one sync may be open at a time. A successful run also
+freshness-bearing base GSC/GA4 data, retries up to five times with exponential backoff, and marks the
+run `success` or `error`. Managed-query enrichment remains on its separate scheduled job so an agent
+sync stays within the platform task lease. Only one sync may be open at a time. A successful run also
 starts a 15-minute cooldown. Repeating the same `Idempotency-Key` returns the original run without
 starting duplicate work.
 

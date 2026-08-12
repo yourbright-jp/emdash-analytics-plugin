@@ -2,7 +2,7 @@ import type { PluginContext } from "emdash";
 import { PluginRouteError } from "emdash";
 
 import { CRON_AGENT_SYNC_PREFIX } from "./constants.js";
-import { enrichManagedQueries, syncBase } from "./sync.js";
+import { syncBase } from "./sync.js";
 import type {
   AgentSyncRun,
   AgentSyncRunResponse,
@@ -143,14 +143,13 @@ export async function handleAgentSyncCron(
 
   try {
     const base = await syncBase(ctx, "agent");
-    const enriched = await enrichManagedQueries(ctx);
     const finishedAt = new Date().toISOString();
     await ctx.storage.agent_sync_runs.put(runId, {
       ...running,
       status: "success",
       updatedAt: finishedAt,
       finishedAt,
-      summary: { ...base, ...enriched },
+      summary: base,
       openLockKey: null
     } satisfies StoredAgentSyncRun);
     return true;
