@@ -105,7 +105,7 @@ describe("agent analytics sync cron", () => {
       persistDailyMetrics: false,
       pageWriteConcurrency: 25,
       pageWriteAfterId: null,
-      pageWriteLimit: 150
+      pageWriteLimit: 50
     });
 
     expect(fixture.records.get(queued.run.id)).toMatchObject({

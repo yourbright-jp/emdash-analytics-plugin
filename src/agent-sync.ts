@@ -16,7 +16,7 @@ const COOLDOWN_MS = 15 * 60 * 1000;
 const SCHEDULE_DELAY_MS = 1_000;
 const MAX_ONESHOT_RETRIES = 5;
 const PAGE_WRITE_CONCURRENCY = 25;
-const PAGE_WRITE_LIMIT = 150;
+const PAGE_WRITE_LIMIT = 50;
 
 export async function requestAgentSync(
   ctx: AgentSyncContext,
