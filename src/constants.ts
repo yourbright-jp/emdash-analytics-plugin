@@ -1,5 +1,5 @@
 export const PLUGIN_ID = "emdash-google-analytics-dashboard";
-export const PLUGIN_VERSION = "0.4.1";
+export const PLUGIN_VERSION = "0.4.2";
 export const AGENT_KEY_PREFIX = "yb_ins_";
 export const AGENT_SCOPE_ANALYTICS_READ = "analytics:read";
 export const AGENT_SCOPE_ANALYTICS_SYNC = "analytics:sync";

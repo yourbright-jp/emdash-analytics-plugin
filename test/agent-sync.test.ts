@@ -97,6 +97,10 @@ describe("agent analytics sync cron", () => {
       handleAgentSyncCron(fixture.ctx, `agent-sync-${queued.run.id}`, { runId: queued.run.id })
     ).resolves.toBe(true);
 
+    expect(syncBase).toHaveBeenCalledWith(fixture.ctx, "agent", {
+      persistDailyMetrics: false
+    });
+
     expect(fixture.records.get(queued.run.id)).toMatchObject({
       status: "success",
       attemptCount: 1,

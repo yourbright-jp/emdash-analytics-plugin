@@ -142,7 +142,7 @@ export async function handleAgentSyncCron(
   await ctx.storage.agent_sync_runs.put(runId, running);
 
   try {
-    const base = await syncBase(ctx, "agent");
+    const base = await syncBase(ctx, "agent", { persistDailyMetrics: false });
     const finishedAt = new Date().toISOString();
     await ctx.storage.agent_sync_runs.put(runId, {
       ...running,
