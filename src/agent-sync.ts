@@ -15,6 +15,8 @@ const OPEN_LOCK_KEY = "analytics-sync";
 const COOLDOWN_MS = 15 * 60 * 1000;
 const SCHEDULE_DELAY_MS = 1_000;
 const MAX_ONESHOT_RETRIES = 5;
+const PAGE_WRITE_CONCURRENCY = 25;
+const PAGE_WRITE_LIMIT = 150;
 
 export async function requestAgentSync(
   ctx: AgentSyncContext,
@@ -56,7 +58,9 @@ export async function requestAgentSync(
     summary: null,
     error: null,
     idempotencyKeyHash,
-    openLockKey: OPEN_LOCK_KEY
+    openLockKey: OPEN_LOCK_KEY,
+    pageWriteCursor: null,
+    pagePart: 0
   };
 
   try {
@@ -130,30 +134,62 @@ export async function handleAgentSyncCron(
 
   const retryCount = readRetryCount(data);
   const startedAt = new Date().toISOString();
-  const running: StoredAgentSyncRun = {
+  let currentRun: StoredAgentSyncRun = {
     ...record,
     status: "running",
     startedAt: record.startedAt ?? startedAt,
     updatedAt: startedAt,
     nextRetryAt: null,
-    attemptCount: retryCount + 1,
+    attemptCount: Math.max(record.attemptCount + 1, retryCount + 1),
     error: null
   };
-  await ctx.storage.agent_sync_runs.put(runId, running);
+  await ctx.storage.agent_sync_runs.put(runId, currentRun);
 
   try {
     const base = await syncBase(ctx, "agent", {
       persistDailyMetrics: false,
-      pageWriteConcurrency: 25
+      pageWriteConcurrency: PAGE_WRITE_CONCURRENCY,
+      pageWriteAfterId: record.pageWriteCursor ?? null,
+      pageWriteLimit: PAGE_WRITE_LIMIT
     });
+    if (base.nextPageCursor) {
+      if (!ctx.cron) throw new Error("Cron scheduling is unavailable");
+
+      const pagePart = (record.pagePart ?? 0) + 1;
+      const scheduledAt = new Date(Date.now() + SCHEDULE_DELAY_MS).toISOString();
+      currentRun = {
+        ...currentRun,
+        status: "queued",
+        updatedAt: new Date().toISOString(),
+        nextRetryAt: scheduledAt,
+        summary: {
+          trackedPages: base.trackedPages,
+          managedPages: base.managedPages
+        },
+        pageWriteCursor: base.nextPageCursor,
+        pagePart
+      };
+      await ctx.storage.agent_sync_runs.put(runId, currentRun);
+      await ctx.cron.schedule(`${CRON_AGENT_SYNC_PREFIX}${runId}-part-${pagePart}`, {
+        schedule: scheduledAt,
+        data: { runId, pagePart }
+      });
+      return true;
+    }
+
     const finishedAt = new Date().toISOString();
     await ctx.storage.agent_sync_runs.put(runId, {
-      ...running,
+      ...currentRun,
       status: "success",
       updatedAt: finishedAt,
       finishedAt,
-      summary: base,
-      openLockKey: null
+      nextRetryAt: null,
+      summary: {
+        trackedPages: base.trackedPages,
+        managedPages: base.managedPages
+      },
+      openLockKey: null,
+      pageWriteCursor: null
     } satisfies StoredAgentSyncRun);
     return true;
   } catch {
@@ -163,7 +199,7 @@ export async function handleAgentSyncCron(
       ? null
       : new Date(Date.now() + 60_000 * 2 ** retryCount).toISOString();
     await ctx.storage.agent_sync_runs.put(runId, {
-      ...running,
+      ...currentRun,
       status: exhausted ? "error" : "retrying",
       updatedAt: failedAt,
       finishedAt: exhausted ? failedAt : null,

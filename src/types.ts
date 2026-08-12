@@ -175,6 +175,10 @@ export interface StoredAgentSyncRun extends Omit<AgentSyncRun, "id"> {
   idempotencyKeyHash: string;
   /** Non-null while queued, running, or retrying; a unique index enforces single-flight. */
   openLockKey: string | null;
+  /** Private cursor used to continue bounded page writes across cron invocations. */
+  pageWriteCursor?: string | null;
+  /** Private monotonically increasing suffix for unique continuation task names. */
+  pagePart?: number;
 }
 
 export interface AgentSyncRunResponse {

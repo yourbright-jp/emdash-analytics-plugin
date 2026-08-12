@@ -91,7 +91,11 @@ describe("agent analytics sync cron", () => {
   it("marks a run successful after the freshness-bearing base sync completes", async () => {
     const fixture = createFixture();
     const queued = await requestAgentSync(fixture.ctx, "sync-cron-success", "yb_ins_sync");
-    vi.mocked(syncBase).mockResolvedValue({ trackedPages: 120, managedPages: 80 });
+    vi.mocked(syncBase).mockResolvedValue({
+      trackedPages: 120,
+      managedPages: 80,
+      nextPageCursor: null
+    });
 
     await expect(
       handleAgentSyncCron(fixture.ctx, `agent-sync-${queued.run.id}`, { runId: queued.run.id })
@@ -99,7 +103,9 @@ describe("agent analytics sync cron", () => {
 
     expect(syncBase).toHaveBeenCalledWith(fixture.ctx, "agent", {
       persistDailyMetrics: false,
-      pageWriteConcurrency: 25
+      pageWriteConcurrency: 25,
+      pageWriteAfterId: null,
+      pageWriteLimit: 150
     });
 
     expect(fixture.records.get(queued.run.id)).toMatchObject({
@@ -108,6 +114,33 @@ describe("agent analytics sync cron", () => {
       openLockKey: null,
       error: null,
       summary: { trackedPages: 120, managedPages: 80 }
+    });
+  });
+
+  it("continues bounded page writes in a uniquely named cron task", async () => {
+    const fixture = createFixture();
+    const queued = await requestAgentSync(fixture.ctx, "sync-cron-continue", "yb_ins_sync");
+    vi.mocked(syncBase).mockResolvedValue({
+      trackedPages: 570,
+      managedPages: 400,
+      nextPageCursor: "page_0150"
+    });
+
+    await expect(
+      handleAgentSyncCron(fixture.ctx, `agent-sync-${queued.run.id}`, { runId: queued.run.id })
+    ).resolves.toBe(true);
+
+    expect(fixture.schedule).toHaveBeenNthCalledWith(
+      2,
+      `agent-sync-${queued.run.id}-part-1`,
+      expect.objectContaining({ data: { runId: queued.run.id, pagePart: 1 } })
+    );
+    expect(fixture.records.get(queued.run.id)).toMatchObject({
+      status: "queued",
+      openLockKey: "analytics-sync",
+      pageWriteCursor: "page_0150",
+      pagePart: 1,
+      summary: { trackedPages: 570, managedPages: 400 }
     });
   });
 
