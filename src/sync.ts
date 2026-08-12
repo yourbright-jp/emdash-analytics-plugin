@@ -108,7 +108,7 @@ export async function testConnection(
 export async function syncBase(
   ctx: PluginCtx,
   jobType: SyncRunRecord["jobType"],
-  options: { persistDailyMetrics?: boolean } = {}
+  options: { persistDailyMetrics?: boolean; persistPagesInTransaction?: boolean } = {}
 ): Promise<{
   trackedPages: number;
   managedPages: number;
@@ -209,12 +209,17 @@ export async function syncBase(
     page.opportunityTags = score.tags;
   }
 
-  await ctx.storage.pages.putMany(
-    Array.from(pages.values()).map((page) => ({
-      id: pageStorageId(page.urlPath),
-      data: page
-    }))
-  );
+  const pageEntries = Array.from(pages.values()).map((page) => ({
+    id: pageStorageId(page.urlPath),
+    data: page
+  }));
+  if (options.persistPagesInTransaction === false) {
+    for (const entry of pageEntries) {
+      await ctx.storage.pages.put(entry.id, entry.data);
+    }
+  } else {
+    await ctx.storage.pages.putMany(pageEntries);
+  }
 
   const combinedTrend = mergeTrend(gscTrend, gaTrend);
   if (options.persistDailyMetrics !== false) {
