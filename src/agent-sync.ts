@@ -132,6 +132,14 @@ export async function handleAgentSyncCron(
   const record = await readStoredRun(ctx, runId);
   if (!record || record.status === "success" || record.status === "error") return true;
 
+  // Timed-out hooks can finish and schedule the next part before their old
+  // one-shot task is retried. A superseded task must not replay current work.
+  const requestedPart = typeof data?.pagePart === "number" ? data.pagePart : 0;
+  if (requestedPart < (record.pagePart ?? 0)) return true;
+  if (requestedPart > (record.pagePart ?? 0)) {
+    throw new Error("Analytics sync part is ahead of its saved checkpoint");
+  }
+
   const retryCount = readRetryCount(data);
   const startedAt = new Date().toISOString();
   let currentRun: StoredAgentSyncRun = {
@@ -157,7 +165,7 @@ export async function handleAgentSyncCron(
 
       const pagePart = (record.pagePart ?? 0) + 1;
       const scheduledAt = new Date(Date.now() + SCHEDULE_DELAY_MS).toISOString();
-      currentRun = {
+      const continuation: StoredAgentSyncRun = {
         ...currentRun,
         status: "queued",
         updatedAt: new Date().toISOString(),
@@ -169,11 +177,13 @@ export async function handleAgentSyncCron(
         pageWriteCursor: base.nextPageCursor,
         pagePart
       };
-      await ctx.storage.agent_sync_runs.put(runId, currentRun);
+      // Do not advance the checkpoint until a continuation actually exists.
+      // Otherwise a scheduling failure makes the original retry look stale.
       await ctx.cron.schedule(`${CRON_AGENT_SYNC_PREFIX}${runId}-part-${pagePart}`, {
         schedule: scheduledAt,
         data: { runId, pagePart }
       });
+      await ctx.storage.agent_sync_runs.put(runId, continuation);
       return true;
     }
 

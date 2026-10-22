@@ -99,7 +99,7 @@ export async function createContentInsightAction(
   }
 
   const contentKey = `${input.contentCollection}:${input.contentId}`;
-  await assertNoOpenAction(ctx, contentKey);
+  await assertNoOpenAction(ctx, contentKey, undefined, input);
 
   const now = new Date().toISOString();
   const action: StoredContentInsightAction = {
@@ -502,7 +502,7 @@ export async function updateContentInsightActionStatus(
     );
   }
   if (nextStatus === "applied" || nextStatus === "measuring") {
-    await assertNoOpenAction(ctx, current.contentKey, current.id);
+    await assertNoOpenAction(ctx, current.contentKey, current.id, current);
   }
   if (["improved", "neutral", "regressed"].includes(nextStatus)) {
     await assertEvaluationMeasurements(ctx, actionId);
@@ -539,20 +539,24 @@ export async function updateContentInsightActionStatus(
 async function assertNoOpenAction(
   ctx: InsightsContext,
   contentKey: string,
-  excludedActionId?: string
+  excludedActionId?: string,
+  identity?: Pick<ContentInsightActionCreateInput, "contentCollection" | "urlPath">
 ): Promise<void> {
+  const identities: Array<Record<string, string>> = [{ contentKey }];
+  if (identity) identities.push({ urlPath: identity.urlPath });
   const results = await Promise.all(
-    OPEN_ACTION_STATUSES.map((status) =>
-      ctx.storage.content_insight_actions.query({
-        where: { contentKey, status },
+    OPEN_ACTION_STATUSES.flatMap((status) =>
+      identities.map((where) => ctx.storage.content_insight_actions.query({
+        where: { ...where, status },
         limit: 10
-      })
+      }))
     )
   );
   const conflict = results
     .flatMap((result) => result.items)
     .map((item) => expectStoredAction(item.data))
-    .find((action) => action.id !== excludedActionId);
+    .find((action) => action.id !== excludedActionId &&
+      (!identity || action.contentCollection === identity.contentCollection));
 
   if (conflict) {
     throw new PluginRouteError(

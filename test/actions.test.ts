@@ -170,6 +170,23 @@ describe("content insight action ledger", () => {
     ).rejects.toMatchObject({ code: "CONTENT_ACTION_IN_PROGRESS", status: 409 });
   });
 
+  it("preserves open-action conflicts when a slug ID becomes a CMS database ID", async () => {
+    const ctx = createContext();
+    const old = await createContentInsightAction(ctx, {
+      ...ACTION_INPUT, contentId: "sample-post"
+    }, "legacy-slug-action", "yb_ins_test");
+    await expect(createContentInsightAction(ctx, {
+      ...ACTION_INPUT, contentId: "cms-database-id"
+    }, "new-database-action", "yb_ins_test")).rejects.toMatchObject({
+      code: "CONTENT_ACTION_IN_PROGRESS", status: 409
+    });
+    await updateContentInsightActionStatus(ctx, old.action.id, "failed", "close-legacy-action", "yb_ins_test");
+    const replacement = await createContentInsightAction(ctx, {
+      ...ACTION_INPUT, contentId: "cms-database-id"
+    }, "new-database-action", "yb_ins_test");
+    expect(replacement.action.contentId).toBe("cms-database-id");
+  });
+
   it("fails closed when the audit event cannot be stored", async () => {
     const ctx = createContext();
     ctx.storage.content_insight_action_events.failNextPut = true;

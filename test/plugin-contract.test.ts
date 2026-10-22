@@ -4,6 +4,11 @@ import { PUBLIC_AGENT_ROUTES } from "../src/constants.js";
 import { createPlugin } from "../src/index.js";
 
 describe("plugin contract", () => {
+  it("allows a bounded sync hook to finish beyond the default five seconds", () => {
+    const plugin = createPlugin();
+    expect(plugin.hooks.cron).toMatchObject({ timeout: 120_000 });
+  });
+
   it("keeps the existing read endpoints and exposes the action ledger routes", () => {
     const plugin = createPlugin();
 

@@ -253,6 +253,9 @@ export function createPlugin() {
         }
       },
       cron: {
+        // A bounded sync part includes Google requests and database writes.
+        // The default 5s hook timeout retries work that is still running.
+        timeout: 120_000,
         handler: async (event, ctx) => {
           if (await handleAgentSyncCron(ctx, event.name, event.data)) return;
           await handleCron(ctx, event.name);

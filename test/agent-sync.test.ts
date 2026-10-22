@@ -88,6 +88,55 @@ describe("agent analytics sync requests", () => {
 });
 
 describe("agent analytics sync cron", () => {
+  it("keeps the original task retryable if continuation scheduling fails", async () => {
+    const fixture = createFixture();
+    const queued = await requestAgentSync(fixture.ctx, "sync-schedule-retry", "yb_ins_sync");
+    vi.mocked(syncBase).mockResolvedValue({ trackedPages: 1309, managedPages: 800, nextPageCursor: "page-50" });
+    fixture.schedule.mockRejectedValueOnce(new Error("scheduler unavailable"));
+
+    await expect(handleAgentSyncCron(fixture.ctx, `agent-sync-${queued.run.id}`, {
+      runId: queued.run.id
+    })).rejects.toThrow("Agent analytics sync failed");
+    expect(fixture.records.get(queued.run.id)).toMatchObject({ status: "retrying", pagePart: 0, pageWriteCursor: null });
+
+    await handleAgentSyncCron(fixture.ctx, `agent-sync-${queued.run.id}`, {
+      runId: queued.run.id, __emdash: { retryCount: 1 }
+    });
+    expect(syncBase).toHaveBeenCalledTimes(2);
+    expect(fixture.records.get(queued.run.id)).toMatchObject({ status: "queued", pagePart: 1, pageWriteCursor: "page-50" });
+  });
+
+  it("ignores a retried task after its saved checkpoint has advanced", async () => {
+    const fixture = createFixture();
+    const queued = await requestAgentSync(fixture.ctx, "sync-stale-part", "yb_ins_sync");
+    const advanced = {
+      ...fixture.records.get(queued.run.id)!,
+      pagePart: 14,
+      pageWriteCursor: "page-700",
+      status: "queued" as const,
+      attemptCount: 38
+    };
+    fixture.records.set(queued.run.id, advanced);
+
+    await expect(handleAgentSyncCron(fixture.ctx, `agent-sync-${queued.run.id}-part-12`, {
+      runId: queued.run.id, pagePart: 12, __emdash: { retryCount: 1 }
+    })).resolves.toBe(true);
+
+    expect(syncBase).not.toHaveBeenCalled();
+    expect(fixture.records.get(queued.run.id)).toEqual(advanced);
+    expect(fixture.schedule).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not skip a checkpoint when a future task arrives", async () => {
+    const fixture = createFixture();
+    const queued = await requestAgentSync(fixture.ctx, "sync-future-part", "yb_ins_sync");
+    await expect(handleAgentSyncCron(fixture.ctx, `agent-sync-${queued.run.id}-part-2`, {
+      runId: queued.run.id, pagePart: 2
+    })).rejects.toThrow("ahead of its saved checkpoint");
+    expect(syncBase).not.toHaveBeenCalled();
+    expect(fixture.records.get(queued.run.id)?.attemptCount).toBe(0);
+  });
+
   it("marks a run successful after the freshness-bearing base sync completes", async () => {
     const fixture = createFixture();
     const queued = await requestAgentSync(fixture.ctx, "sync-cron-success", "yb_ins_sync");

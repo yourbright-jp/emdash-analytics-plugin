@@ -60,14 +60,22 @@ export async function getManagedContentMap(siteOrigin: string): Promise<Map<stri
       status: "published",
       limit: 50,
       cursor,
-      orderBy: { updatedAt: "desc" }
+      orderBy: { updated_at: "desc" }
     });
 
+    if (result.error) throw result.error;
+
     for (const entry of result.entries as Array<EntryLike>) {
-      const id = typeof entry.id === "string" ? entry.id : "";
-      if (!id) continue;
-      const slug = typeof entry.slug === "string" ? entry.slug : null;
       const data = entry.data ?? {};
+      // Astro's live entry id can be the slug. The persisted CMS identity is
+      // available in data.id and is what Content API/action-ledger callers use.
+      const id = typeof data.id === "string"
+        ? data.id
+        : typeof entry.id === "string" ? entry.id : "";
+      if (!id) continue;
+      const slug = typeof entry.slug === "string"
+        ? entry.slug
+        : typeof data.slug === "string" ? data.slug : null;
       const title = typeof data.title === "string" ? data.title : slug || id;
       const excerpt = typeof data.excerpt === "string" ? data.excerpt : undefined;
       const seoDescription =
@@ -84,6 +92,12 @@ export async function getManagedContentMap(siteOrigin: string): Promise<Map<stri
       });
     }
 
+    if ("hasMore" in result && result.hasMore === true && !result.nextCursor) {
+      throw new Error("Managed content pagination ended before the final page");
+    }
+    if (result.nextCursor && result.nextCursor === cursor) {
+      throw new Error("Managed content pagination did not advance");
+    }
     cursor = result.nextCursor;
   } while (cursor);
 
@@ -104,9 +118,13 @@ export async function resolveManagedContent(
   const result = await getEmDashEntry("posts", ref);
   const entry = result.entry as EntryLike | null;
   if (!entry) return null;
-  const entryId = typeof entry.id === "string" ? entry.id : ref;
-  const entrySlug = typeof entry.slug === "string" ? entry.slug : null;
   const data = entry.data ?? {};
+  const entryId = typeof data.id === "string"
+    ? data.id
+    : typeof entry.id === "string" ? entry.id : ref;
+  const entrySlug = typeof entry.slug === "string"
+    ? entry.slug
+    : typeof data.slug === "string" ? data.slug : null;
   const urlPath = `/blog/${entrySlug || entryId}/`;
   return {
     collection: "posts",
