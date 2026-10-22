@@ -132,6 +132,14 @@ export async function handleAgentSyncCron(
   const record = await readStoredRun(ctx, runId);
   if (!record || record.status === "success" || record.status === "error") return true;
 
+  // Timed-out hooks can finish and schedule the next part before their old
+  // one-shot task is retried. A superseded task must not replay current work.
+  const requestedPart = typeof data?.pagePart === "number" ? data.pagePart : 0;
+  if (requestedPart < (record.pagePart ?? 0)) return true;
+  if (requestedPart > (record.pagePart ?? 0)) {
+    throw new Error("Analytics sync part is ahead of its saved checkpoint");
+  }
+
   const retryCount = readRetryCount(data);
   const startedAt = new Date().toISOString();
   let currentRun: StoredAgentSyncRun = {
