@@ -32,6 +32,7 @@ export interface PluginConfigSummary {
   gscSiteUrl: string;
   hasServiceAccount: boolean;
   serviceAccountEmail?: string;
+  syncIntervalHours: number;
 }
 
 export interface FreshnessState {

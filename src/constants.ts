@@ -62,3 +62,9 @@ export const PAGE_KIND_ORDER = [
   "landing",
   "other"
 ] as const;
+
+export const CONFIG_SYNC_INTERVAL_HOURS_KEY = "settings:syncIntervalHours";
+export const DEFAULT_SYNC_INTERVAL_HOURS = 6;
+export const SYNC_INTERVAL_HOURS_OPTIONS = [1, 2, 3, 4, 6, 8, 12, 24] as const;
+// A once-a-day sync cannot use `*/24` (cron has no interval-from-now), so it runs at a fixed hour.
+export const DAILY_SYNC_HOUR_UTC = 8;

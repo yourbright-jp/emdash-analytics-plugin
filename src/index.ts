@@ -31,6 +31,7 @@ import {
 } from "./constants.js";
 import { resolveConfigInput } from "./config-validation.js";
 import { getConfigSummary, loadConfig, saveConfig } from "./config.js";
+import { isSyncIntervalHours, loadSyncIntervalHours, saveSyncIntervalHours, syncIntervalToCron } from "./sync-schedule.js";
 import {
   authenticateAgentRequest,
   createAgentKey,
@@ -75,7 +76,8 @@ const configSaveSchema = z.object({
   siteOrigin: z.string().optional(),
   ga4PropertyId: z.string().optional(),
   gscSiteUrl: z.string().optional(),
-  serviceAccountJson: z.string().optional()
+  serviceAccountJson: z.string().optional(),
+  syncIntervalHours: z.number().int().refine(isSyncIntervalHours, "Unsupported sync interval").optional()
 });
 
 const pageListSchema = z.object({
@@ -247,7 +249,7 @@ export function createPlugin() {
       "plugin:activate": {
         handler: async (_event, ctx) => {
           if (ctx.cron) {
-            await ctx.cron.schedule(CRON_SYNC_BASE, { schedule: "0 */6 * * *" });
+            await ctx.cron.schedule(CRON_SYNC_BASE, { schedule: syncIntervalToCron(await loadSyncIntervalHours(ctx)) });
             await ctx.cron.schedule(CRON_ENRICH_MANAGED, { schedule: "0 2 * * *" });
           }
         }
@@ -292,7 +294,11 @@ export function createPlugin() {
           if (!resolved.success) {
             throw new PluginRouteError("BAD_REQUEST", resolved.message, 400);
           }
-          return saveConfig(ctx, resolved.data);
+          const saved = await saveConfig(ctx, resolved.data);
+          if (input.syncIntervalHours !== undefined) {
+            await saveSyncIntervalHours(ctx, input.syncIntervalHours);
+          }
+          return { ...saved, syncIntervalHours: await loadSyncIntervalHours(ctx) };
         }
       },
       [ADMIN_ROUTES.CONNECTION_TEST]: {

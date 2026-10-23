@@ -8,9 +8,11 @@ import {
   CONFIG_SITE_ORIGIN_KEY
 } from "./constants.js";
 import { normalizeOrigin, parseServiceAccount, resolveConfigInput } from "./config-validation.js";
+import { loadSyncIntervalHours } from "./sync-schedule.js";
 import type { PluginConfigSummary, SavedPluginConfig } from "./types.js";
 
 type PluginCtx = PluginContext;
+type StoredConfigSummary = Omit<PluginConfigSummary, "syncIntervalHours">;
 
 export async function loadConfig(ctx: PluginCtx): Promise<SavedPluginConfig | null> {
   const [siteOrigin, ga4PropertyId, gscSiteUrl, serviceAccountCiphertext] = await Promise.all([
@@ -38,7 +40,7 @@ export async function loadConfig(ctx: PluginCtx): Promise<SavedPluginConfig | nu
   return resolved.data;
 }
 
-export async function saveConfig(ctx: PluginCtx, input: SavedPluginConfig): Promise<PluginConfigSummary> {
+export async function saveConfig(ctx: PluginCtx, input: SavedPluginConfig): Promise<StoredConfigSummary> {
   const resolved = resolveConfigInput(input);
   if (!resolved.success) {
     throw new Error(resolved.message);
@@ -58,16 +60,17 @@ export async function saveConfig(ctx: PluginCtx, input: SavedPluginConfig): Prom
 }
 
 export async function getConfigSummary(ctx: PluginCtx): Promise<PluginConfigSummary> {
-  const config = await loadConfig(ctx);
+  const [config, syncIntervalHours] = await Promise.all([loadConfig(ctx), loadSyncIntervalHours(ctx)]);
   if (!config) {
     return {
       siteOrigin: "",
       ga4PropertyId: "",
       gscSiteUrl: "",
-      hasServiceAccount: false
+      hasServiceAccount: false,
+      syncIntervalHours
     };
   }
-  return summarizeConfig(config);
+  return { ...summarizeConfig(config), syncIntervalHours };
 }
 
 export function getAuthSecret(): string {
@@ -78,7 +81,7 @@ export function getAuthSecret(): string {
   return value;
 }
 
-function summarizeConfig(config: SavedPluginConfig): PluginConfigSummary {
+function summarizeConfig(config: SavedPluginConfig): StoredConfigSummary {
   const serviceAccount = parseServiceAccount(config.serviceAccountJson);
   return {
     siteOrigin: normalizeOrigin(config.siteOrigin),
