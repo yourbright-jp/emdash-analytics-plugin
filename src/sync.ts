@@ -26,6 +26,7 @@ import {
 } from "./content.js";
 import { parseServiceAccount } from "./config-validation.js";
 import { loadConfig } from "./config.js";
+import { loadSyncIntervalHours } from "./sync-schedule.js";
 import {
   buildWindows,
   fetchGaDailyTrend,
@@ -83,7 +84,8 @@ export async function getStatus(ctx: PluginCtx): Promise<{
           ga4PropertyId: config.ga4PropertyId,
           gscSiteUrl: config.gscSiteUrl,
           hasServiceAccount: true,
-          serviceAccountEmail: parseServiceAccount(config.serviceAccountJson).client_email
+          serviceAccountEmail: parseServiceAccount(config.serviceAccountJson).client_email,
+          syncIntervalHours: await loadSyncIntervalHours(ctx)
         }
       : null,
     summary: await ctx.kv.get<SiteSummary>(SITE_SUMMARY_KEY),

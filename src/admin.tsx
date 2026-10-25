@@ -7,7 +7,10 @@ import {
   AGENT_SCOPE_ANALYTICS_SYNC,
   AGENT_SCOPE_CONTENT_INSIGHTS_WRITE,
   ADMIN_ROUTES,
-  PLUGIN_ID
+  DAILY_SYNC_HOUR_UTC,
+  DEFAULT_SYNC_INTERVAL_HOURS,
+  PLUGIN_ID,
+  SYNC_INTERVAL_HOURS_OPTIONS
 } from "./constants.js";
 import type {
   AgentKeyMetadata,
@@ -45,6 +48,7 @@ interface ConfigDraft {
   ga4PropertyId: string;
   gscSiteUrl: string;
   serviceAccountJson: string;
+  syncIntervalHours: string;
 }
 
 interface StoredConfigFields {
@@ -76,7 +80,8 @@ const EMPTY_CONFIG: ConfigDraft = {
   siteOrigin: "",
   ga4PropertyId: "",
   gscSiteUrl: "",
-  serviceAccountJson: ""
+  serviceAccountJson: "",
+  syncIntervalHours: String(DEFAULT_SYNC_INTERVAL_HOURS)
 };
 
 function validateSettingsDraft(
@@ -162,11 +167,13 @@ function buildConfigPayload(draft: ConfigDraft): {
   ga4PropertyId: string;
   gscSiteUrl: string;
   serviceAccountJson?: string;
+  syncIntervalHours: number;
 } {
   const payload = {
     siteOrigin: draft.siteOrigin.trim(),
     ga4PropertyId: draft.ga4PropertyId.trim(),
-    gscSiteUrl: draft.gscSiteUrl.trim()
+    gscSiteUrl: draft.gscSiteUrl.trim(),
+    syncIntervalHours: Number(draft.syncIntervalHours)
   };
   const serviceAccountJson = draft.serviceAccountJson.trim();
 
@@ -1090,7 +1097,8 @@ function SettingsPage({ embedded = false }: { embedded?: boolean }) {
         siteOrigin: config.siteOrigin || "",
         ga4PropertyId: config.ga4PropertyId || "",
         gscSiteUrl: config.gscSiteUrl || "",
-        serviceAccountJson: ""
+        serviceAccountJson: "",
+        syncIntervalHours: String(config.syncIntervalHours || DEFAULT_SYNC_INTERVAL_HOURS)
       });
       setStoredConfig({
         siteOrigin: config.siteOrigin || "",
@@ -1237,6 +1245,24 @@ function SettingsPage({ embedded = false }: { embedded?: boolean }) {
               <Input value={draft.gscSiteUrl} onChange={(value) => setDraft((current) => ({ ...current, gscSiteUrl: value }))} />
             </Field>
           </div>
+          <Field
+            label="Sync frequency"
+            hint={`How often analytics data is fetched from Google. Takes effect when you save. A daily sync runs at ${String(DAILY_SYNC_HOUR_UTC).padStart(2, "0")}:00 UTC. You can always use Run Manual Sync.`}
+          >
+            <Select
+              value={draft.syncIntervalHours}
+              onChange={(value) => setDraft((current) => ({ ...current, syncIntervalHours: value }))}
+              options={SYNC_INTERVAL_HOURS_OPTIONS.map((hours) => ({
+                value: String(hours),
+                label:
+                  hours === 24
+                    ? "Once a day"
+                    : hours === 1
+                      ? "Every hour"
+                      : `Every ${hours} hours${hours === DEFAULT_SYNC_INTERVAL_HOURS ? " (default)" : ""}`
+              }))}
+            />
+          </Field>
           <div className="md:col-span-2">
             <Field
               label="Service Account JSON"

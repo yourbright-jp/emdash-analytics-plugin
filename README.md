@@ -81,6 +81,7 @@ Notes:
 - `Service Account JSON` is required on the first save.
 - After the first successful save, leaving `Service Account JSON` blank keeps the currently stored credential.
 - If non-secret fields are left blank during an update, the plugin keeps the previously saved values.
+- `Sync frequency` sets how often the base metrics sync runs: every 1, 2, 3, 4, 6, 8 or 12 hours (default: every 6 hours), or once a day at 08:00 UTC. Saving the setting reschedules the sync immediately. Each sync writes one row per page to the database, so sites on hosts that bill or cap database writes can lower the frequency. `Run Manual Sync` is always available. The managed-query enrichment job is unchanged and runs daily at 02:00 UTC.
 
 After saving:
 
